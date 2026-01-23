@@ -1,0 +1,12 @@
+node_modules
+.DS_Store
+.env
+apps/api/.env
+apps/api/prisma/dev.db
+apps/api/prisma/dev.db-journal
+apps/api/uploads
+apps/api/uploads/**
+apps/web/.next
+apps/web/out
+apps/api/dist
+packages/**/dist
