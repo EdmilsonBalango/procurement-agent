@@ -7,5 +7,9 @@
     "types": ["node"],
     "resolveJsonModule": true
   },
-  "include": ["src/**/*", "tests/**/*"]
+  "include": ["src/**/*", "tests/**/*"],
+  "ts-node": {
+    "esm": true,
+    "experimentalEsm": true
+  }
 }

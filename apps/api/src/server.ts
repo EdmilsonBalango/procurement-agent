@@ -5,12 +5,12 @@ import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
 import path from 'node:path';
-import { authRoutes } from './routes/auth';
-import { caseRoutes } from './routes/cases';
-import { supplierRoutes } from './routes/suppliers';
-import { notificationRoutes } from './routes/notifications';
-import { metricsRoutes } from './routes/metrics';
-import { fileRoutes } from './routes/files';
+import { authRoutes } from './routes/auth.js';
+import { caseRoutes } from './routes/cases.js';
+import { supplierRoutes } from './routes/suppliers.js';
+import { notificationRoutes } from './routes/notifications.js';
+import { metricsRoutes } from './routes/metrics.js';
+import { fileRoutes } from './routes/files.js';
 
 const app = Fastify({
   logger: true,
@@ -47,8 +47,6 @@ await app.register(supplierRoutes);
 await app.register(notificationRoutes);
 await app.register(metricsRoutes);
 await app.register(fileRoutes);
-
-app.get('/docs/json', async () => app.swagger());
 
 const port = Number(process.env.PORT ?? 3001);
 

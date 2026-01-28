@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { PageShell } from '../../components/page-shell';
 import {
   Badge,
@@ -15,16 +16,10 @@ import {
   TableHeader,
   TableRow,
 } from '@procurement/ui';
-
-const stageData = [
-  { label: 'New', count: 6 },
-  { label: 'Assigned', count: 4 },
-  { label: 'Waiting Quotes', count: 3 },
-  { label: 'Ready for Review', count: 2 },
-  { label: 'Ready to Send', count: 1 },
-];
+import { prRecords, stageData } from '../../lib/mock-data';
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [billing, setBilling] = useState('monthly');
 
   return (
@@ -53,7 +48,7 @@ export default function DashboardPage() {
             { label: 'Avg. cycle time', value: '4.1 days', change: '-8% improvement' },
             { label: 'SLA compliance', value: '93%', change: '2 breaches this week' },
           ].map((kpi) => (
-            <Card key={kpi.label}>
+            <Card key={kpi.label} className="motion-alert">
               <CardHeader>
                 <p className="text-xs uppercase text-slate-400">{kpi.label}</p>
                 <h3 className="mt-2 text-2xl font-semibold text-heading">{kpi.value}</h3>
@@ -79,12 +74,32 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-4 md:grid-cols-5">
-              {stageData.map((stage) => (
-                <div key={stage.label} className="rounded-lg border border-slate-200 p-4">
-                  <p className="text-xs uppercase text-slate-400">{stage.label}</p>
-                  <p className="mt-2 text-2xl font-semibold text-heading">{stage.count}</p>
-                </div>
-              ))}
+              {stageData.map((stage, index) => {
+                const colors = [
+                  { bgColor: 'bg-green-50', borderColor: 'border-green-200', textColor: 'text-green-700', badgeBg: 'bg-green-500' },
+                  { bgColor: 'bg-purple-50', borderColor: 'border-purple-200', textColor: 'text-purple-700', badgeBg: 'bg-purple-500' },
+                  { bgColor: 'bg-amber-50', borderColor: 'border-amber-200', textColor: 'text-amber-700', badgeBg: 'bg-amber-500' },
+                  { bgColor: 'bg-orange-50', borderColor: 'border-orange-200', textColor: 'text-orange-700', badgeBg: 'bg-orange-500' },
+                  { bgColor: 'bg-blue-50', borderColor: 'border-blue-200', textColor: 'text-blue-700', badgeBg: 'bg-blue-500' },
+                ];
+                const color = colors[index];
+                return (
+                  <div
+                    key={stage.label}
+                    className={`motion-alert rounded-lg border ${color.borderColor} ${color.bgColor} p-4 dark:border-slate-800 dark:bg-slate-900`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`h-2 w-2 rounded-full ${color.badgeBg}`}></div>
+                      <p className="text-xs uppercase font-semibold text-slate-600 dark:text-slate-400">
+                        {stage.label}
+                      </p>
+                    </div>
+                    <p className={`mt-2 text-2xl font-semibold ${color.textColor} dark:text-slate-100`}>
+                      {stage.count}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -107,20 +122,32 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <tbody>
-                {[
-                  { pr: 'PR-2024-1001', status: 'Waiting Quotes', buyer: 'Buyer 1', updated: '2h ago' },
-                  { pr: 'PR-2024-1003', status: 'Ready for Review', buyer: 'Buyer 2', updated: '5h ago' },
-                  { pr: 'PR-2024-1007', status: 'Assigned', buyer: 'Buyer 1', updated: '1d ago' },
-                ].map((row) => (
-                  <TableRow key={row.pr}>
-                    <TableCell>{row.pr}</TableCell>
-                    <TableCell>
-                      <Badge>{row.status}</Badge>
-                    </TableCell>
-                    <TableCell>{row.buyer}</TableCell>
-                    <TableCell>{row.updated}</TableCell>
-                  </TableRow>
-                ))}
+                {prRecords.slice(0, 3).map((row) => {
+                  const statusColorMap: Record<string, { bgColor: string; textColor: string; label: string }> = {
+                    'NEW': { bgColor: 'bg-green-100', textColor: 'text-green-700', label: 'New' },
+                    'ASSIGNED': { bgColor: 'bg-purple-100', textColor: 'text-purple-700', label: 'Assigned' },
+                    'WAITING_QUOTES': { bgColor: 'bg-amber-100', textColor: 'text-amber-700', label: 'Waiting Quotes' },
+                    'READY_FOR_REVIEW': { bgColor: 'bg-orange-100', textColor: 'text-orange-700', label: 'Ready for Review' },
+                    'READY_TO_SEND': { bgColor: 'bg-blue-100', textColor: 'text-blue-700', label: 'Ready to Send' },
+                  };
+                  const statusColor = statusColorMap[row.status] || statusColorMap.NEW;
+                  return (
+                    <TableRow
+                      key={row.id}
+                      className="motion-alert cursor-pointer hover:bg-slate-50"
+                      onClick={() => router.push(`/prs/${row.id}`)}
+                    >
+                      <TableCell>{row.id}</TableCell>
+                      <TableCell>
+                        <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${statusColor.bgColor} ${statusColor.textColor}`}>
+                          {statusColor.label}
+                        </span>
+                      </TableCell>
+                      <TableCell>{row.buyer}</TableCell>
+                      <TableCell>{row.updated}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </tbody>
             </Table>
           </CardContent>

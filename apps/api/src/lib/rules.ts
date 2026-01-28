@@ -26,5 +26,5 @@ export function selectBuyerRoundRobin(
     return null;
   }
   const sorted = [...workloads].sort((a, b) => a.count - b.count);
-  return sorted[0].buyerId;
+  return sorted[0]?.buyerId ?? null;
 }

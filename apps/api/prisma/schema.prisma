@@ -3,69 +3,15 @@ generator client {
 }
 
 datasource db {
-  provider = env("DATABASE_PROVIDER")
+  provider = "sqlite"
   url      = env("DATABASE_URL")
-}
-
-enum Role {
-  ADMIN
-  BUYER
-}
-
-enum CaseStatus {
-  NEW
-  MISSING_INFO
-  ASSIGNED
-  WAITING_QUOTES
-  READY_FOR_REVIEW
-  READY_TO_SEND
-  SENT
-  CLOSED
-}
-
-enum ChecklistStatus {
-  OPEN
-  DONE
-  BLOCKED
-}
-
-enum ChecklistOwnerRole {
-  SYSTEM
-  BUYER
-  REQUESTER
-}
-
-enum FileType {
-  PR_ATTACHMENT
-  QUOTE
-  OUTPUT
-}
-
-enum OutboundEmailType {
-  RFQ
-  REQUEST_INFO
-  FINAL_RESPONSE
-  MFA_CODE
-}
-
-enum NotificationSeverity {
-  INFO
-  WARN
-  CRITICAL
-}
-
-enum CasePriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
 }
 
 model User {
   id         String    @id @default(uuid())
   name       String
   email      String    @unique
-  role       Role
+  role       String    // ADMIN or BUYER
   passwordHash String
   lastMfaAt  DateTime?
   createdAt  DateTime  @default(now())
@@ -75,6 +21,7 @@ model User {
   caseExceptions Case[] @relation("ExceptionApprover")
   notifications Notification[]
   caseEvents CaseEvent[] @relation("EventActor")
+  mfaChallenges MfaChallenge[]
 }
 
 model Session {
@@ -102,7 +49,7 @@ model Supplier {
   id         String   @id @default(uuid())
   name       String
   email      String
-  categories String[]
+  categories String   // JSON array stored as string
   isActive   Boolean  @default(true)
   createdAt  DateTime @default(now())
   quotes     Quote[]
@@ -115,20 +62,20 @@ model Case {
   requesterName        String
   requesterEmail       String
   department           String
-  priority             CasePriority
+  priority             String     // LOW, MEDIUM, HIGH, URGENT
   neededBy             DateTime
   costCenter           String
   deliveryLocation     String
   budgetEstimate       Float
-  status               CaseStatus @default(NEW)
+  status               String     @default("NEW") // NEW, MISSING_INFO, ASSIGNED, WAITING_QUOTES, READY_FOR_REVIEW, READY_TO_SEND, SENT, CLOSED
   assignedBuyerId      String?
   assignedBuyer        User?      @relation("AssignedBuyer", fields: [assignedBuyerId], references: [id])
   exceptionApprovedById String?
   exceptionApprovedBy  User?      @relation("ExceptionApprover", fields: [exceptionApprovedById], references: [id])
   exceptionApprovedAt  DateTime?
   exceptionReason      String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
   items                CaseItem[]
   checklist            ChecklistItem[]
   quotes               Quote[]
@@ -149,12 +96,12 @@ model CaseItem {
 }
 
 model ChecklistItem {
-  id        String           @id @default(uuid())
+  id        String   @id @default(uuid())
   caseId    String
-  case      Case             @relation(fields: [caseId], references: [id])
+  case      Case     @relation(fields: [caseId], references: [id])
   title     String
-  status    ChecklistStatus
-  ownerRole ChecklistOwnerRole
+  status    String   // OPEN, DONE, BLOCKED
+  ownerRole String   // SYSTEM, BUYER, REQUESTER
 }
 
 model Quote {
@@ -175,7 +122,7 @@ model File {
   id         String   @id @default(uuid())
   caseId     String
   case       Case     @relation(fields: [caseId], references: [id])
-  type       FileType
+  type       String   // PR_ATTACHMENT, QUOTE, OUTPUT
   filename   String
   mimeType   String
   size       Int
@@ -189,12 +136,12 @@ model OutboundEmailLog {
   id                String   @id @default(uuid())
   caseId            String?
   case              Case?    @relation(fields: [caseId], references: [id])
-  type              OutboundEmailType
-  to                String[]
-  cc                String[]
+  type              String   // RFQ, REQUEST_INFO, FINAL_RESPONSE, MFA_CODE
+  to                String   // JSON array stored as string
+  cc                String   // JSON array stored as string
   subject           String
   body              String
-  attachmentFileIds String[]
+  attachmentFileIds String   // JSON array stored as string
   createdAt         DateTime @default(now())
   createdBy         String?
 }
@@ -208,7 +155,7 @@ model Notification {
   body      String
   caseId    String?
   case      Case?    @relation(fields: [caseId], references: [id])
-  severity  NotificationSeverity
+  severity  String   // INFO, WARN, CRITICAL
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 }

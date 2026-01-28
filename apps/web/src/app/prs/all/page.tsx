@@ -1,13 +1,19 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
 import { PageShell } from '../../../components/page-shell';
 import { Badge, Button, Card, CardContent, CardHeader, Table, TableCell, TableHead, TableHeader, TableRow } from '@procurement/ui';
+import { prRecords } from '../../../lib/mock-data';
 
-const rows = [
-  { pr: 'PR-2024-1004', status: 'ASSIGNED', buyer: 'Buyer 1', quotes: 2 },
-  { pr: 'PR-2024-1005', status: 'WAITING_QUOTES', buyer: 'Buyer 2', quotes: 1 },
-  { pr: 'PR-2024-1006', status: 'READY_FOR_REVIEW', buyer: 'Buyer 1', quotes: 3 },
-];
+const rows = prRecords.map((pr) => ({
+  pr: pr.id,
+  status: pr.status,
+  buyer: pr.buyer,
+  quotes: pr.quotes,
+}));
 
 export default function AllPrsPage() {
+  const router = useRouter();
   return (
     <PageShell>
       <div className="mx-auto flex max-w-5xl flex-col gap-6">
@@ -34,10 +40,14 @@ export default function AllPrsPage() {
               </TableHeader>
               <tbody>
                 {rows.map((row) => (
-                  <TableRow key={row.pr}>
+                  <TableRow
+                    key={row.pr}
+                    className="cursor-pointer hover:bg-slate-50"
+                    onClick={() => router.push(`/prs/${row.pr}`)}
+                  >
                     <TableCell>{row.pr}</TableCell>
                     <TableCell>
-                      <Badge>{row.status}</Badge>
+                      <Badge variant="case" status={row.status} />
                     </TableCell>
                     <TableCell>{row.buyer}</TableCell>
                     <TableCell>{row.quotes}</TableCell>

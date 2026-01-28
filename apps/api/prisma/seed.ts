@@ -1,10 +1,10 @@
-import { PrismaClient, CasePriority, CaseStatus } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-const priorities: CasePriority[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
-const statuses: CaseStatus[] = [
+const priorities: string[] = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+const statuses: string[] = [
   'NEW',
   'ASSIGNED',
   'WAITING_QUOTES',
@@ -58,7 +58,7 @@ async function main() {
         data: {
           name: `Supplier ${index + 1}`,
           email: `supplier${index + 1}@example.com`,
-          categories: ['IT', 'Facilities', 'Marketing'].slice(0, (index % 3) + 1),
+          categories: JSON.stringify(['IT', 'Facilities', 'Marketing'].slice(0, (index % 3) + 1)),
           isActive: true,
         },
       }),

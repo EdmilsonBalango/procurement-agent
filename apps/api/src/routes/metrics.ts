@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
-import { prisma } from '../lib/prisma';
-import { requireAuth } from '../lib/require-auth';
+import { prisma } from '../lib/prisma.js';
+import { requireAuth } from '../lib/require-auth.js';
 
 export async function metricsRoutes(app: FastifyInstance) {
   app.get('/metrics/summary', { preHandler: requireAuth }, async () => {

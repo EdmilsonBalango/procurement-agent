@@ -1,12 +1,47 @@
 import * as React from 'react';
 import { cn } from '../utils';
+import { getStatusColors } from '../utils/status-colors';
 
-export const Badge = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => (
-  <span
-    className={cn(
-      'inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-600',
-      className,
-    )}
-    {...props}
-  />
+export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
+  variant?: 'default' | 'case' | 'priority' | 'checklist' | 'severity' | 'role';
+  statusType?: 'case' | 'priority' | 'checklist' | 'severity' | 'role';
+  status?: string;
+}
+
+export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
+  ({ className, variant = 'default', statusType, status, children, ...props }, ref) => {
+    let baseClasses =
+      'inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium';
+
+    // If status-based coloring is requested
+    if (variant !== 'default' && status) {
+      const colors = getStatusColors(status, statusType || variant);
+      return (
+        <span
+          ref={ref}
+          className={cn(baseClasses, colors.bg, colors.text, colors.border, className)}
+          {...props}
+        >
+          {children || status}
+        </span>
+      );
+    }
+
+    // Default styling
+    return (
+      <span
+        ref={ref}
+        className={cn(
+          baseClasses,
+          'border-slate-200 bg-slate-50 text-slate-600',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </span>
+    );
+  },
 );
+
+Badge.displayName = 'Badge';

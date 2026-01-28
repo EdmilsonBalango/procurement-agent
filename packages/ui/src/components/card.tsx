@@ -6,7 +6,7 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
     <div
       ref={ref}
       className={cn(
-        'rounded-xl border border-slate-200 bg-white shadow-[0_1px_0_rgba(17,24,39,0.02)]',
+        'rounded-xl border border-slate-200 bg-white shadow-[0_1px_0_rgba(17,24,39,0.02)] dark:border-slate-800 dark:bg-slate-900',
         className,
       )}
       {...props}
@@ -17,7 +17,7 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
 Card.displayName = 'Card';
 
 export const CardHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('border-b border-slate-100 px-6 py-4', className)} {...props} />
+  <div className={cn('border-b border-slate-100 px-6 py-4 dark:border-slate-800', className)} {...props} />
 );
 
 export const CardContent = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
@@ -25,5 +25,5 @@ export const CardContent = ({ className, ...props }: React.HTMLAttributes<HTMLDi
 );
 
 export const CardFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
-  <div className={cn('border-t border-slate-100 px-6 py-4', className)} {...props} />
+  <div className={cn('border-t border-slate-100 px-6 py-4 dark:border-slate-800', className)} {...props} />
 );

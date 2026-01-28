@@ -66,7 +66,14 @@ export default function LoginPage() {
             </div>
             {error && <p className="text-sm text-red-500">{error}</p>}
             <Button full disabled={loading} type="submit">
-              {loading ? 'Signing in...' : 'Continue'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="motion-spinner h-4 w-4 rounded-full border-2 border-slate-300 border-t-slate-600" />
+                  Signing in...
+                </span>
+              ) : (
+                'Continue'
+              )}
             </Button>
           </form>
         </CardContent>

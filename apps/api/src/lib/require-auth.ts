@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { getSessionUser } from './auth';
+import { getSessionUser } from './auth.js';
 
 export async function requireAuth(request: FastifyRequest, reply: FastifyReply) {
   const user = await getSessionUser(request);

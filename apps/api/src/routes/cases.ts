@@ -1,5 +1,4 @@
 import { FastifyInstance } from 'fastify';
-import { ZodTypeProvider } from '@fastify/type-provider-zod';
 import {
   assignCaseSchema,
   approveExceptionSchema,
@@ -9,14 +8,12 @@ import {
   sendFinalSchema,
   updateCaseSchema,
 } from '@procurement/shared';
-import { prisma } from '../lib/prisma';
-import { requireAdmin, requireAuth } from '../lib/require-auth';
-import { canMoveToReadyForReview, selectBuyerRoundRobin } from '../lib/rules';
+import { prisma } from '../lib/prisma.js';
+import { requireAdmin, requireAuth } from '../lib/require-auth.js';
+import { canMoveToReadyForReview, selectBuyerRoundRobin } from '../lib/rules.js';
 
 export async function caseRoutes(app: FastifyInstance) {
-  const server = app.withTypeProvider<ZodTypeProvider>();
-
-  server.get('/cases', { preHandler: requireAuth }, async (request) => {
+  app.get('/cases', { preHandler: requireAuth }, async (request) => {
     const { status, buyerId, priority, requesterEmail, dateFrom, dateTo, search } =
       request.query as Record<string, string | undefined>;
 
@@ -46,23 +43,23 @@ export async function caseRoutes(app: FastifyInstance) {
     });
   });
 
-  server.post(
+  app.post(
     '/cases',
     {
       preHandler: requireAuth,
-      schema: { body: createCaseSchema },
     },
     async (request) => {
+      const body = request.body as any;
       return prisma.case.create({
         data: {
-          ...request.body,
-          neededBy: new Date(request.body.neededBy),
+          ...body,
+          neededBy: new Date(body.neededBy),
         },
       });
     },
   );
 
-  server.get('/cases/:id', { preHandler: requireAuth }, async (request, reply) => {
+  app.get('/cases/:id', { preHandler: requireAuth }, async (request, reply) => {
     const { id } = request.params as { id: string };
     const record = await prisma.case.findUnique({
       where: { id },
@@ -85,15 +82,14 @@ export async function caseRoutes(app: FastifyInstance) {
     return record;
   });
 
-  server.patch(
+  app.patch(
     '/cases/:id',
     {
       preHandler: requireAuth,
-      schema: { body: updateCaseSchema },
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const payload = request.body;
+      const payload = request.body as any;
 
       if (payload.status === 'READY_FOR_REVIEW') {
         const quotesCount = await prisma.quote.count({ where: { caseId: id } });
@@ -113,15 +109,15 @@ export async function caseRoutes(app: FastifyInstance) {
     },
   );
 
-  server.post(
+  app.post(
     '/cases/:id/assign',
     {
       preHandler: requireAuth,
-      schema: { body: assignCaseSchema },
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
-      const { buyerId } = request.body;
+      const body = request.body as any;
+      const { buyerId } = body;
       let resolvedBuyerId = buyerId;
 
       if (!resolvedBuyerId) {
@@ -166,15 +162,15 @@ export async function caseRoutes(app: FastifyInstance) {
     },
   );
 
-  server.post(
+  app.post(
     '/cases/:id/request-quotes',
     {
       preHandler: requireAuth,
-      schema: { body: requestQuotesSchema },
     },
     async (request) => {
       const { id } = request.params as { id: string };
-      const { supplierIds, messageTemplate } = request.body;
+      const body = request.body as any;
+      const { supplierIds, messageTemplate } = body;
       const suppliers = await prisma.supplier.findMany({
         where: { id: { in: supplierIds } },
       });
@@ -183,11 +179,11 @@ export async function caseRoutes(app: FastifyInstance) {
         data: suppliers.map((supplier) => ({
           caseId: id,
           type: 'RFQ',
-          to: [supplier.email],
-          cc: [],
+          to: JSON.stringify([supplier.email]),
+          cc: JSON.stringify([]),
           subject: `RFQ for case ${id}`,
           body: messageTemplate ?? 'Please provide your best quote.',
-          attachmentFileIds: [],
+          attachmentFileIds: JSON.stringify([]),
           createdBy: request.user?.id,
         })),
       });
@@ -201,55 +197,55 @@ export async function caseRoutes(app: FastifyInstance) {
     },
   );
 
-  server.post(
+  app.post(
     '/cases/:id/quotes',
     {
       preHandler: requireAuth,
-      schema: { body: createQuoteSchema },
     },
     async (request) => {
       const { id } = request.params as { id: string };
+      const body = request.body as any;
       const quote = await prisma.quote.create({
         data: {
           caseId: id,
-          supplierId: request.body.supplierId,
-          amount: request.body.amount,
-          currency: request.body.currency,
-          fileId: request.body.fileId,
-          notes: request.body.notes,
+          supplierId: body.supplierId,
+          amount: body.amount,
+          currency: body.currency,
+          fileId: body.fileId,
+          notes: body.notes,
         },
       });
       return quote;
     },
   );
 
-  server.post(
+  app.post(
     '/cases/:id/approve-exception',
     {
       preHandler: requireAdmin,
-      schema: { body: approveExceptionSchema },
     },
     async (request) => {
       const { id } = request.params as { id: string };
+      const body = request.body as any;
       return prisma.case.update({
         where: { id },
         data: {
           exceptionApprovedAt: new Date(),
           exceptionApprovedById: request.user?.id,
-          exceptionReason: request.body.reason,
+          exceptionReason: body.reason,
         },
       });
     },
   );
 
-  server.post(
+  app.post(
     '/cases/:id/send-final',
     {
       preHandler: requireAuth,
-      schema: { body: sendFinalSchema },
     },
     async (request, reply) => {
       const { id } = request.params as { id: string };
+      const body = request.body as any;
       const caseRecord = await prisma.case.findUnique({ where: { id } });
       if (!caseRecord || caseRecord.status !== 'READY_TO_SEND') {
         return reply.status(400).send({ message: 'Case not ready to send.' });
@@ -259,11 +255,11 @@ export async function caseRoutes(app: FastifyInstance) {
         data: {
           caseId: id,
           type: 'FINAL_RESPONSE',
-          to: [caseRecord.requesterEmail],
-          cc: [],
-          subject: request.body.subject,
-          body: request.body.body,
-          attachmentFileIds: request.body.attachmentFileIds ?? [],
+          to: JSON.stringify([caseRecord.requesterEmail]),
+          cc: JSON.stringify([]),
+          subject: body.subject,
+          body: body.body,
+          attachmentFileIds: JSON.stringify(body.attachmentFileIds ?? []),
           createdBy: request.user?.id,
         },
       });

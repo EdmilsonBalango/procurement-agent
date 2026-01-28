@@ -6,11 +6,97 @@
   color-scheme: light;
 }
 
+html {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+
 body {
-  @apply bg-background text-slate-700;
+  @apply bg-background text-slate-700 dark:bg-slate-950 dark:text-slate-100;
   font-feature-settings: "liga" 1, "kern" 1;
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+
+*, *::before, *::after {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
 }
 
 h1, h2, h3, h4 {
-  @apply text-heading;
+  @apply text-heading dark:text-slate-100;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body,
+  *,
+  *::before,
+  *::after {
+    transition: none;
+  }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes soft-pulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-alert,
+  .motion-modal,
+  .motion-fade,
+  .motion-spinner {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+.motion-alert {
+  animation: fade-in-up 420ms ease-out both;
+}
+
+.motion-modal {
+  animation: scale-in 220ms ease-out both;
+}
+
+.motion-fade {
+  animation: fade-in-up 320ms ease-out both;
+}
+
+.motion-spinner {
+  animation: spin-slow 900ms linear infinite;
+}
+
+.motion-pulse {
+  animation: soft-pulse 1200ms ease-in-out infinite;
 }

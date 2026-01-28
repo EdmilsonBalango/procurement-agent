@@ -1,6 +1,7 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  darkMode: 'class',
   content: [
     './src/app/**/*.{ts,tsx}',
     './src/components/**/*.{ts,tsx}',
@@ -14,6 +15,39 @@ const config: Config = {
         muted: '#6B7280',
         heading: '#111827',
         primary: '#269B62',
+        // Dashboard metrics colors
+        metrics: {
+          blue: {
+            light: '#EFF6FF',
+            border: '#BFDBFE',
+            text: '#1E40AF',
+            dot: '#3B82F6',
+          },
+          purple: {
+            light: '#FAF5FF',
+            border: '#E9D5FF',
+            text: '#6B21A8',
+            dot: '#A855F7',
+          },
+          emerald: {
+            light: '#F0FDF4',
+            border: '#BBEDD5',
+            text: '#047857',
+            dot: '#10B981',
+          },
+          orange: {
+            light: '#FFF7ED',
+            border: '#FED7AA',
+            text: '#92400E',
+            dot: '#F97316',
+          },
+          yellow: {
+            light: '#FEFCE8',
+            border: '#FEF08A',
+            text: '#854D0E',
+            dot: '#EAB308',
+          },
+        },
       },
       borderRadius: {
         xl: '12px',

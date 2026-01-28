@@ -1,7 +1,7 @@
 import { FastifyRequest } from 'fastify';
 import bcrypt from 'bcryptjs';
 import dayjs from 'dayjs';
-import { prisma } from './prisma';
+import { prisma } from './prisma.js';
 
 export const SESSION_COOKIE = 'procurement_session';
 

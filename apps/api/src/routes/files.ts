@@ -2,8 +2,8 @@ import { FastifyInstance } from 'fastify';
 import { pipeline } from 'node:stream/promises';
 import fs from 'node:fs';
 import path from 'node:path';
-import { prisma } from '../lib/prisma';
-import { requireAuth } from '../lib/require-auth';
+import { prisma } from '../lib/prisma.js';
+import { requireAuth } from '../lib/require-auth.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
 

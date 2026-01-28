@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canMoveToReadyForReview, isMfaRequired, selectBuyerRoundRobin } from '../src/lib/rules';
+import { canMoveToReadyForReview, isMfaRequired, selectBuyerRoundRobin } from '../src/lib/rules.js';
 
 describe('MFA rule', () => {
   it('requires MFA when lastMfaAt is null', () => {

@@ -67,7 +67,14 @@ export default function MfaPage() {
             )}
             {error && <p className="text-sm text-red-500">{error}</p>}
             <Button full disabled={loading} type="submit">
-              {loading ? 'Verifying...' : 'Verify'}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="motion-spinner h-4 w-4 rounded-full border-2 border-slate-300 border-t-slate-600" />
+                  Verifying...
+                </span>
+              ) : (
+                'Verify'
+              )}
             </Button>
           </form>
         </CardContent>

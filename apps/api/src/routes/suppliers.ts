@@ -1,30 +1,29 @@
 import { FastifyInstance } from 'fastify';
-import { ZodTypeProvider } from '@fastify/type-provider-zod';
 import { supplierSchema } from '@procurement/shared';
-import { prisma } from '../lib/prisma';
-import { requireAuth } from '../lib/require-auth';
+import { prisma } from '../lib/prisma.js';
+import { requireAuth } from '../lib/require-auth.js';
 
 export async function supplierRoutes(app: FastifyInstance) {
-  const server = app.withTypeProvider<ZodTypeProvider>();
-
-  server.get('/suppliers', { preHandler: requireAuth }, async () => {
+  app.get('/suppliers', { preHandler: requireAuth }, async () => {
     return prisma.supplier.findMany({ orderBy: { createdAt: 'desc' } });
   });
 
-  server.post(
+  app.post(
     '/suppliers',
-    { preHandler: requireAuth, schema: { body: supplierSchema } },
+    { preHandler: requireAuth },
     async (request) => {
-      return prisma.supplier.create({ data: request.body });
+      const body = request.body as any;
+      return prisma.supplier.create({ data: body });
     },
   );
 
-  server.patch(
+  app.patch(
     '/suppliers/:id',
-    { preHandler: requireAuth, schema: { body: supplierSchema.partial() } },
+    { preHandler: requireAuth },
     async (request) => {
       const { id } = request.params as { id: string };
-      return prisma.supplier.update({ where: { id }, data: request.body });
+      const body = request.body as any;
+      return prisma.supplier.update({ where: { id }, data: body });
     },
   );
 }

@@ -1,11 +1,6 @@
 import { PageShell } from '../../components/page-shell';
 import { Badge, Button, Card, CardContent, CardHeader, Table, TableCell, TableHead, TableHeader, TableRow } from '@procurement/ui';
-
-const users = [
-  { name: 'Admin User', email: 'admin@local', role: 'ADMIN' },
-  { name: 'Buyer One', email: 'buyer1@local', role: 'BUYER' },
-  { name: 'Buyer Two', email: 'buyer2@local', role: 'BUYER' },
-];
+import { users } from '../../lib/mock-data';
 
 export default function SettingsPage() {
   return (
@@ -38,7 +33,7 @@ export default function SettingsPage() {
                     <TableCell>{user.name}</TableCell>
                     <TableCell>{user.email}</TableCell>
                     <TableCell>
-                      <Badge>{user.role}</Badge>
+                      <Badge variant="role" status={user.role} />
                     </TableCell>
                     <TableCell>
                       <Button variant="secondary" size="sm">Reset password</Button>
@@ -57,11 +52,11 @@ export default function SettingsPage() {
             <div className="space-y-3 text-sm text-slate-600">
               <div className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3">
                 <span>PR-2024-1009 approved without 3 quotes</span>
-                <Badge>ADMIN</Badge>
+                <Badge variant="role" status="ADMIN" />
               </div>
               <div className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3">
                 <span>PR-2024-1004 exception for urgent delivery</span>
-                <Badge>ADMIN</Badge>
+                <Badge variant="role" status="ADMIN" />
               </div>
             </div>
           </CardContent>
