@@ -11,6 +11,7 @@ import { supplierRoutes } from './routes/suppliers.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { metricsRoutes } from './routes/metrics.js';
 import { fileRoutes } from './routes/files.js';
+import { webhookRoutes } from './routes/webhooks.js';
 
 const app = Fastify({
   logger: true,
@@ -47,6 +48,7 @@ await app.register(supplierRoutes);
 await app.register(notificationRoutes);
 await app.register(metricsRoutes);
 await app.register(fileRoutes);
+await app.register(webhookRoutes);
 
 const port = Number(process.env.PORT ?? 3001);
 

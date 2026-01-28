@@ -33,6 +33,11 @@ export const caseStatusColors: Record<string, { bg: string; text: string; border
     text: 'text-blue-700',
     border: 'border-blue-200',
   },
+  CLOSED_PAID: {
+    bg: 'bg-emerald-50',
+    text: 'text-emerald-700',
+    border: 'border-emerald-200',
+  },
   SENT: {
     bg: 'bg-emerald-50',
     text: 'text-emerald-700',

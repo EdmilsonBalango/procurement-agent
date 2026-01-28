@@ -81,6 +81,7 @@ export default function DashboardPage() {
                   { bgColor: 'bg-amber-50', borderColor: 'border-amber-200', textColor: 'text-amber-700', badgeBg: 'bg-amber-500' },
                   { bgColor: 'bg-orange-50', borderColor: 'border-orange-200', textColor: 'text-orange-700', badgeBg: 'bg-orange-500' },
                   { bgColor: 'bg-blue-50', borderColor: 'border-blue-200', textColor: 'text-blue-700', badgeBg: 'bg-blue-500' },
+                  { bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200', textColor: 'text-emerald-700', badgeBg: 'bg-emerald-500' },
                 ];
                 const color = colors[index];
                 return (
@@ -129,6 +130,7 @@ export default function DashboardPage() {
                     'WAITING_QUOTES': { bgColor: 'bg-amber-100', textColor: 'text-amber-700', label: 'Waiting Quotes' },
                     'READY_FOR_REVIEW': { bgColor: 'bg-orange-100', textColor: 'text-orange-700', label: 'Ready for Review' },
                     'READY_TO_SEND': { bgColor: 'bg-blue-100', textColor: 'text-blue-700', label: 'Ready to Send' },
+                    'CLOSED_PAID': { bgColor: 'bg-emerald-100', textColor: 'text-emerald-700', label: 'Closed & Paid' },
                   };
                   const statusColor = statusColorMap[row.status] || statusColorMap.NEW;
                   return (

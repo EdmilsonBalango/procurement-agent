@@ -5,6 +5,7 @@ export type CaseStatus =
   | 'WAITING_QUOTES'
   | 'READY_FOR_REVIEW'
   | 'READY_TO_SEND'
+  | 'CLOSED_PAID'
   | 'SENT'
   | 'CLOSED';
 
@@ -369,4 +370,5 @@ export const stageData = [
   { label: 'Waiting Quotes', count: 3 },
   { label: 'Ready for Review', count: 2 },
   { label: 'Ready to Send', count: 1 },
+  { label: 'Closed & Paid', count: 1 },
 ];

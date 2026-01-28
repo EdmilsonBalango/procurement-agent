@@ -145,6 +145,7 @@ export default function CaseWorkspacePage() {
             <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
+            <TabsTrigger value="close">Close & Pay</TabsTrigger>
           </TabsList>
           <TabsContent value="overview">
             <div className="mt-6 grid gap-6 md:grid-cols-2">
@@ -173,12 +174,12 @@ export default function CaseWorkspacePage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                  {['New', 'Assigned', 'Waiting Quotes', 'Ready for Review', 'Ready to Send'].map(
+                  {['New', 'Assigned', 'Waiting Quotes', 'Ready for Review', 'Ready to Send', 'Closed & Paid'].map(
                     (step, index) => (
                     <div key={step} className="flex gap-4">
                       <div className="flex flex-col items-center">
                       <div className={`h-3 w-3 rounded-full ${index < 3 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                      {index < 4 && <div className="mt-2 h-8 w-0.5 bg-slate-200" />}
+                      {index < 5 && <div className="mt-2 h-8 w-0.5 bg-slate-200" />}
                       </div>
                       <div className="pt-0.5 pb-4">
                       <p className={`text-sm font-medium ${index < 3 ? 'text-slate-800' : 'text-slate-400'}`}>
@@ -406,6 +407,23 @@ export default function CaseWorkspacePage() {
                   ))}
                   </tbody>
                 </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+          <TabsContent value="close">
+            <Card className="mt-6">
+              <CardHeader>
+                <h3 className="text-lg font-semibold text-heading">Close & Pay</h3>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm text-slate-600">
+                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                  Upload proof of payment (POP) to complete the workflow.
+                </div>
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="secondary" size="sm">Upload POP</Button>
+                  <Button variant="secondary" size="sm">Send to supplier</Button>
+                  <Button size="sm">Mark as closed & paid</Button>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
