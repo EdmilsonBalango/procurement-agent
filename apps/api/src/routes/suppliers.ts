@@ -1,11 +1,10 @@
 import { FastifyInstance } from 'fastify';
-import { supplierSchema } from '@procurement/shared';
-import { prisma } from '../lib/prisma.js';
+import { createSupplier, listSuppliers, updateSupplier } from '../lib/db.js';
 import { requireAuth } from '../lib/require-auth.js';
 
 export async function supplierRoutes(app: FastifyInstance) {
   app.get('/suppliers', { preHandler: requireAuth }, async () => {
-    return prisma.supplier.findMany({ orderBy: { createdAt: 'desc' } });
+    return listSuppliers();
   });
 
   app.post(
@@ -13,17 +12,21 @@ export async function supplierRoutes(app: FastifyInstance) {
     { preHandler: requireAuth },
     async (request) => {
       const body = request.body as any;
-      return prisma.supplier.create({ data: body });
+      return createSupplier(body);
     },
   );
 
   app.patch(
     '/suppliers/:id',
     { preHandler: requireAuth },
-    async (request) => {
+    async (request, reply) => {
       const { id } = request.params as { id: string };
       const body = request.body as any;
-      return prisma.supplier.update({ where: { id }, data: body });
+      const updated = await updateSupplier(id, body);
+      if (!updated) {
+        return reply.status(404).send({ message: 'Not found' });
+      }
+      return updated;
     },
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PageShell } from '../../components/page-shell';
 import {
@@ -16,11 +16,83 @@ import {
   TableHeader,
   TableRow,
 } from '@procurement/ui';
-import { prRecords, stageData } from '../../lib/mock-data';
+import { apiFetch } from '../../lib/api';
+import type { PrRecord } from '../../lib/types';
+
+type ApiCaseRecord = {
+  id: string;
+  prNumber: string;
+  status: PrRecord['status'];
+  subject: string;
+  requesterName: string;
+  priority: PrRecord['priority'];
+  updatedAt: string;
+  assignedBuyer?: { name: string } | null;
+  quotes?: Array<{ id: string }>;
+};
 
 export default function DashboardPage() {
   const router = useRouter();
   const [billing, setBilling] = useState('monthly');
+  const [records, setRecords] = useState<PrRecord[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchCases = () =>
+      apiFetch<ApiCaseRecord[]>('/cases')
+        .then((data) => {
+          if (!active) {
+            return;
+          }
+          const mapped = data.map((record) => ({
+            id: record.prNumber,
+            status: record.status,
+            summary: record.subject,
+            neededBy: 'TBD',
+            requester: record.requesterName,
+            buyer: record.assignedBuyer?.name ?? 'Unassigned',
+            priority: record.priority,
+            quotes: record.quotes?.length ?? 0,
+            updated: new Date(record.updatedAt).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            }),
+            items: [],
+          }));
+          console.log('Fetched cases:', mapped);
+          setRecords(mapped);
+        })
+        .catch(() => undefined);
+
+    fetchCases();
+    const interval = window.setInterval(fetchCases, 10000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const stageData = useMemo(() => {
+    const stageConfig: Array<{ label: string; status: PrRecord['status'] }> = [
+      { label: 'New', status: 'NEW' },
+      { label: 'Assigned', status: 'ASSIGNED' },
+      { label: 'Waiting Quotes', status: 'WAITING_QUOTES' },
+      { label: 'Ready for Review', status: 'READY_FOR_REVIEW' },
+      { label: 'Ready to Send', status: 'READY_TO_SEND' },
+      { label: 'Closed & Paid', status: 'CLOSED_PAID' },
+    ];
+    return stageConfig.map((stage) => ({
+      label: stage.label,
+      status: stage.status,
+      count: records.filter((record) => record.status === stage.status).length,
+    }));
+  }, [records]);
+
+  const openCount = useMemo(
+    () => records.filter((record) => !['CLOSED', 'CLOSED_PAID', 'SENT'].includes(record.status))
+      .length,
+    [records],
+  );
 
   return (
     <PageShell>
@@ -44,7 +116,7 @@ export default function DashboardPage() {
 
         <div className="grid gap-4 md:grid-cols-3">
           {[
-            { label: 'Open PRs', value: '42', change: '+6% vs last month' },
+            { label: 'Open PRs', value: String(openCount), change: 'Live count' },
             { label: 'Avg. cycle time', value: '4.1 days', change: '-8% improvement' },
             { label: 'SLA compliance', value: '93%', change: '2 breaches this week' },
           ].map((kpi) => (
@@ -83,11 +155,12 @@ export default function DashboardPage() {
                   { bgColor: 'bg-blue-50', borderColor: 'border-blue-200', textColor: 'text-blue-700', badgeBg: 'bg-blue-500' },
                   { bgColor: 'bg-emerald-50', borderColor: 'border-emerald-200', textColor: 'text-emerald-700', badgeBg: 'bg-emerald-500' },
                 ];
-                const color = colors[index];
+                const color = colors[index % colors.length]!;
                 return (
                   <div
                     key={stage.label}
-                    className={`motion-alert rounded-lg border ${color.borderColor} ${color.bgColor} p-4 dark:border-slate-800 dark:bg-slate-900`}
+                    className={`motion-alert cursor-pointer rounded-lg border ${color.borderColor} ${color.bgColor} p-4 dark:border-slate-800 dark:bg-slate-900`}
+                    onClick={() => router.push(`/prs/inbox?status=${stage.status}`)}
                   >
                     <div className="flex items-center gap-2">
                       <div className={`h-2 w-2 rounded-full ${color.badgeBg}`}></div>
@@ -123,16 +196,18 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <tbody>
-                {prRecords.slice(0, 3).map((row) => {
-                  const statusColorMap: Record<string, { bgColor: string; textColor: string; label: string }> = {
+                {records.slice(0, 3).map((row) => {
+                  const statusColorMap = {
                     'NEW': { bgColor: 'bg-green-100', textColor: 'text-green-700', label: 'New' },
                     'ASSIGNED': { bgColor: 'bg-purple-100', textColor: 'text-purple-700', label: 'Assigned' },
                     'WAITING_QUOTES': { bgColor: 'bg-amber-100', textColor: 'text-amber-700', label: 'Waiting Quotes' },
                     'READY_FOR_REVIEW': { bgColor: 'bg-orange-100', textColor: 'text-orange-700', label: 'Ready for Review' },
                     'READY_TO_SEND': { bgColor: 'bg-blue-100', textColor: 'text-blue-700', label: 'Ready to Send' },
                     'CLOSED_PAID': { bgColor: 'bg-emerald-100', textColor: 'text-emerald-700', label: 'Closed & Paid' },
-                  };
-                  const statusColor = statusColorMap[row.status] || statusColorMap.NEW;
+                  } as const;
+                  type StatusColor = (typeof statusColorMap)[keyof typeof statusColorMap];
+                  const statusColor =
+                    statusColorMap[row.status as keyof typeof statusColorMap] ?? statusColorMap.NEW;
                   return (
                     <TableRow
                       key={row.id}

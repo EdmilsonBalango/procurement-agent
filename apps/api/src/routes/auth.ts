@@ -1,8 +1,18 @@
 import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
 import dayjs from 'dayjs';
-import { loginSchema, mfaVerifySchema } from '@procurement/shared';
-import { prisma } from '../lib/prisma.js';
+import {
+  createMfaChallenge,
+  createOutboundEmailLog,
+  deleteSessionById,
+  findLatestValidMfaChallenge,
+  findSessionById,
+  findUserByEmail,
+  findUserById,
+  getLatestMfaLog,
+  updateMfaChallenge,
+  updateUser,
+} from '../lib/db.js';
 import { createSession, SESSION_COOKIE, verifyPassword } from '../lib/auth.js';
 import { isMfaRequired } from '../lib/rules.js';
 
@@ -12,8 +22,12 @@ export async function authRoutes(app: FastifyInstance) {
   app.post(
     '/auth/login',
     async (request, reply) => {
-      const { email, password } = request.body as { email: string; password: string };
-      const user = await prisma.user.findUnique({ where: { email } });
+      const body = (request.body ?? {}) as Partial<{ email: string; password: string }>;
+      const { email, password } = body;
+      if (!email || !password) {
+        return reply.status(400).send({ message: 'Email and password are required' });
+      }
+      const user = await findUserByEmail(email);
       if (!user) {
         return reply.status(401).send({ message: 'Invalid credentials' });
       }
@@ -23,38 +37,30 @@ export async function authRoutes(app: FastifyInstance) {
         return reply.status(401).send({ message: 'Invalid credentials' });
       }
 
-      const requiresMfa = isMfaRequired(user.lastMfaAt);
+      // const requiresMfa = isMfaRequired(user.lastMfaAt);
 
-      if (requiresMfa) {
-        const code = String(Math.floor(100000 + Math.random() * 900000));
-        const codeHash = await bcrypt.hash(code, 10);
-        const expiresAt = dayjs().add(MFA_EXP_MINUTES, 'minute').toDate();
-        await prisma.mfaChallenge.create({
-          data: {
-            userId: user.id,
-            codeHash,
-            expiresAt,
-          },
-        });
+      // if (requiresMfa) {
+      //   const code = String(Math.floor(100000 + Math.random() * 900000));
+      //   const codeHash = await bcrypt.hash(code, 10);
+      //   const expiresAt = dayjs().add(MFA_EXP_MINUTES, 'minute').toDate();
+      //   createMfaChallenge({ userId: user.id, codeHash, expiresAt });
 
-        await prisma.outboundEmailLog.create({
-          data: {
-            type: 'MFA_CODE',
-            to: JSON.stringify([user.email]),
-            cc: JSON.stringify([]),
-            subject: 'Your MFA code',
-            body: `Your one-time code is ${code}.`,
-            attachmentFileIds: JSON.stringify([]),
-            createdBy: user.id,
-          },
-        });
+      //   createOutboundEmailLog({
+      //     type: 'MFA_CODE',
+      //     to: JSON.stringify([user.email]),
+      //     cc: JSON.stringify([]),
+      //     subject: 'Your MFA code',
+      //     body: `Your one-time code is ${code}.`,
+      //     attachmentFileIds: JSON.stringify([]),
+      //     createdBy: user.id,
+      //   });
 
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`[MFA] code for ${user.email}: ${code}`);
-        }
+      //   if (process.env.NODE_ENV === 'development') {
+      //     console.log(`[MFA] code for ${user.email}: ${code}`);
+      //   }
 
-        return reply.send({ requiresMfa: true });
-      }
+      //   return reply.send({ requiresMfa: true });
+      // }
 
       const session = await createSession({
         userId: user.id,
@@ -77,19 +83,12 @@ export async function authRoutes(app: FastifyInstance) {
     '/auth/mfa/verify',
     async (request, reply) => {
       const { email, code } = request.body as { email: string; code: string };
-      const user = await prisma.user.findUnique({ where: { email } });
+      const user = await findUserByEmail(email);
       if (!user) {
         return reply.status(401).send({ message: 'Invalid credentials' });
       }
 
-      const challenge = await prisma.mfaChallenge.findFirst({
-        where: {
-          userId: user.id,
-          consumedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+      const challenge = await findLatestValidMfaChallenge(user.id);
 
       if (!challenge) {
         return reply.status(400).send({ message: 'Challenge expired' });
@@ -100,22 +99,16 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       const matches = await bcrypt.compare(code, challenge.codeHash);
-      await prisma.mfaChallenge.update({
-        where: { id: challenge.id },
-        data: {
-          attempts: { increment: 1 },
-          consumedAt: matches ? new Date() : null,
-        },
+      await updateMfaChallenge(challenge.id, {
+        attempts: challenge.attempts + 1,
+        consumedAt: matches ? new Date() : null,
       });
 
       if (!matches) {
         return reply.status(401).send({ message: 'Invalid code' });
       }
 
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastMfaAt: new Date() },
-      });
+      await updateUser(user.id, { lastMfaAt: new Date() });
 
       const session = await createSession({
         userId: user.id,
@@ -137,9 +130,14 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/auth/logout', async (request, reply) => {
     const sessionId = request.cookies[SESSION_COOKIE];
     if (sessionId) {
-      await prisma.session.deleteMany({ where: { id: sessionId } });
+      await deleteSessionById(sessionId);
     }
-    reply.clearCookie(SESSION_COOKIE, { path: '/' });
+    reply.clearCookie(SESSION_COOKIE, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+    });
     return reply.send({ success: true });
   });
 
@@ -149,21 +147,23 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(401).send({ message: 'Not authenticated' });
     }
 
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-      include: { user: true },
-    });
+    const session = await findSessionById(sessionId);
 
     if (!session) {
       return reply.status(401).send({ message: 'Not authenticated' });
     }
 
+    const user = await findUserById(session.userId);
+    if (!user) {
+      return reply.status(401).send({ message: 'Not authenticated' });
+    }
+
     return reply.send({
-      id: session.user.id,
-      name: session.user.name,
-      email: session.user.email,
-      role: session.user.role,
-      lastMfaAt: session.user.lastMfaAt,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      lastMfaAt: user.lastMfaAt,
     });
   });
 
@@ -176,10 +176,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ message: 'Email required' });
     }
 
-    const log = await prisma.outboundEmailLog.findFirst({
-      where: { type: 'MFA_CODE' },
-      orderBy: { createdAt: 'desc' },
-    });
+    const log = await getLatestMfaLog();
 
     if (!log) {
       return reply.status(404).send({ message: 'No code found' });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ChangeEvent, type MouseEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
 import { PageShell } from '../../components/page-shell';
@@ -22,11 +22,31 @@ import {
   TableRow,
   VisuallyHidden,
 } from '@procurement/ui';
-import { suppliers } from '../../lib/mock-data';
+import { apiFetch } from '../../lib/api';
+
+type UiSupplier = {
+  id: string;
+  name: string;
+  categories: string;
+  status: 'Active' | 'Inactive';
+  email: string;
+  phonePrimary: string;
+  phoneSecondary: string;
+  location: string;
+};
+
+type ApiSupplier = {
+  id: string;
+  name: string;
+  email: string;
+  categories: string;
+  isActive: boolean;
+};
 
 export default function SuppliersPage() {
   const router = useRouter();
-  const [activeSupplier, setActiveSupplier] = useState<(typeof suppliers)[number] | null>(null);
+  const [suppliers, setSuppliers] = useState<UiSupplier[]>([]);
+  const [activeSupplier, setActiveSupplier] = useState<UiSupplier | null>(null);
   const [formState, setFormState] = useState({
     name: '',
     email: '',
@@ -46,7 +66,7 @@ export default function SuppliersPage() {
     });
   };
 
-  const startEdit = (supplier: (typeof suppliers)[number]) => {
+  const startEdit = (supplier: UiSupplier) => {
     setActiveSupplier(supplier);
     setFormState({
       name: supplier.name,
@@ -56,6 +76,37 @@ export default function SuppliersPage() {
       location: supplier.location,
     });
   };
+
+  useEffect(() => {
+    let active = true;
+    const fetchSuppliers = () =>
+      apiFetch<ApiSupplier[]>('/suppliers')
+        .then((data) => {
+          if (!active) {
+            return;
+          }
+          setSuppliers(
+            data.map((supplier) => ({
+              id: supplier.id,
+              name: supplier.name,
+              categories: supplier.categories,
+              status: supplier.isActive ? 'Active' : 'Inactive',
+              email: supplier.email,
+              phonePrimary: '',
+              phoneSecondary: '',
+              location: '',
+            })),
+          );
+        })
+        .catch(() => undefined);
+
+    fetchSuppliers();
+    const interval = window.setInterval(fetchSuppliers, 20000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   return (
     <PageShell>

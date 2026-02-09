@@ -1,13 +1,87 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PageShell } from '../../components/page-shell';
 import { Badge, Card, CardContent, CardHeader } from '@procurement/ui';
-import { notifications as initialNotifications } from '../../lib/mock-data';
+import { apiFetch } from '../../lib/api';
+
+type ApiNotification = {
+  id: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+  caseId?: string | null;
+};
+
+type ApiCaseRecord = {
+  id: string;
+  prNumber: string;
+};
+
+type UiNotification = {
+  id: string;
+  title: string;
+  body: string;
+  status: 'READ' | 'UNREAD';
+  prId?: string;
+  receivedAt: string;
+};
+
+const formatReceivedAt = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const datePart = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+  const timePart = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+  return `${datePart} • ${timePart}`;
+};
 
 export default function NotificationsPage() {
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const [notifications, setNotifications] = useState<UiNotification[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchNotifications = async () => {
+      try {
+        const [notes, cases] = await Promise.all([
+          apiFetch<ApiNotification[]>('/notifications'),
+          apiFetch<ApiCaseRecord[]>('/cases'),
+        ]);
+        if (!active) {
+          return;
+        }
+        const caseMap = new Map(cases.map((record) => [record.id, record.prNumber]));
+        const mapped = notes.map((note) => ({
+          id: note.id,
+          title: note.title,
+          body: note.body,
+          status: note.isRead ? 'READ' : 'UNREAD',
+          prId: note.caseId ? caseMap.get(note.caseId) : undefined,
+          receivedAt: formatReceivedAt(note.createdAt),
+        }));
+        setNotifications(mapped);
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchNotifications();
+    const interval = window.setInterval(fetchNotifications, 10000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   return (
     <PageShell>
@@ -69,11 +143,15 @@ export default function NotificationsPage() {
                     href={`/prs/${note.prId}`}
                     className={cardClassName}
                     onClick={() =>
-                      setNotifications((prev) =>
-                        prev.map((item) =>
-                          item.id === note.id ? { ...item, status: 'READ' } : item,
-                        ),
-                      )
+                      apiFetch(`/notifications/${note.id}/read`, { method: 'PATCH' })
+                        .then(() =>
+                          setNotifications((prev) =>
+                            prev.map((item) =>
+                              item.id === note.id ? { ...item, status: 'READ' } : item,
+                            ),
+                          ),
+                        )
+                        .catch(() => undefined)
                     }
                   >
                     {content}

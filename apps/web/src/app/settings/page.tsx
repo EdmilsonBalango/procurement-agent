@@ -1,8 +1,39 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import { PageShell } from '../../components/page-shell';
 import { Badge, Button, Card, CardContent, CardHeader, Table, TableCell, TableHead, TableHeader, TableRow } from '@procurement/ui';
-import { users } from '../../lib/mock-data';
+import { apiFetch } from '../../lib/api';
+
+type ApiUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'BUYER';
+};
 
 export default function SettingsPage() {
+  const [users, setUsers] = useState<ApiUser[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchUsers = () =>
+      apiFetch<ApiUser[]>('/users')
+        .then((data) => {
+          if (active) {
+            setUsers(data);
+          }
+        })
+        .catch(() => undefined);
+
+    fetchUsers();
+    const interval = window.setInterval(fetchUsers, 30000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   return (
     <PageShell>
       <div className="mx-auto flex max-w-5xl flex-col gap-6">

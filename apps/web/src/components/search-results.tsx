@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
 import {
   Badge,
@@ -15,13 +15,140 @@ import {
   TabsTrigger,
 } from '@procurement/ui';
 import { useSearch } from '../app/providers';
-import { notifications, prRecords, suppliers, users } from '../lib/mock-data';
+import { apiFetch } from '../lib/api';
+import type { PrRecord } from '../lib/types';
+
+type ApiCaseRecord = {
+  id: string;
+  prNumber: string;
+  status: PrRecord['status'];
+  subject: string;
+  requesterName: string;
+  priority: PrRecord['priority'];
+  updatedAt: string;
+  assignedBuyer?: { name: string } | null;
+};
+
+type ApiSupplier = {
+  id: string;
+  name: string;
+  email: string;
+  categories: string;
+};
+
+type ApiNotification = {
+  id: string;
+  title: string;
+  body: string;
+  isRead: boolean;
+  caseId?: string | null;
+};
+
+type ApiUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'BUYER';
+};
+
+type UiSupplier = {
+  name: string;
+  categories: string;
+  email: string;
+  location: string;
+};
+
+type UiNotification = {
+  id: string;
+  title: string;
+  body: string;
+  status: 'READ' | 'UNREAD';
+  prId?: string;
+};
+
+type UiUser = {
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'BUYER';
+};
 
 const normalize = (value: string) => value.toLowerCase();
 
 export const SearchResults = () => {
   const { query, setQuery } = useSearch();
+  const [prRecords, setPrRecords] = useState<PrRecord[]>([]);
+  const [suppliers, setSuppliers] = useState<UiSupplier[]>([]);
+  const [notifications, setNotifications] = useState<UiNotification[]>([]);
+  const [users, setUsers] = useState<UiUser[]>([]);
   const term = query.trim();
+
+  useEffect(() => {
+    let active = true;
+    const fetchAll = async () => {
+      try {
+        const [cases, suppliersData, notificationsData, usersData] = await Promise.all([
+          apiFetch<ApiCaseRecord[]>('/cases'),
+          apiFetch<ApiSupplier[]>('/suppliers'),
+          apiFetch<ApiNotification[]>('/notifications'),
+          apiFetch<ApiUser[]>('/users'),
+        ]);
+        if (!active) {
+          return;
+        }
+        const caseMap = new Map(cases.map((record) => [record.id, record.prNumber]));
+        setPrRecords(
+          cases.map((record) => ({
+            id: record.prNumber,
+            status: record.status,
+            summary: record.subject,
+            neededBy: 'TBD',
+            requester: record.requesterName,
+            buyer: record.assignedBuyer?.name ?? 'Unassigned',
+            priority: record.priority,
+            quotes: 0,
+            updated: new Date(record.updatedAt).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            }),
+            items: [],
+          })),
+        );
+        setSuppliers(
+          suppliersData.map((supplier) => ({
+            name: supplier.name,
+            categories: supplier.categories,
+            email: supplier.email,
+            location: '—',
+          })),
+        );
+        setNotifications(
+          notificationsData.map((note) => ({
+            id: note.id,
+            title: note.title,
+            body: note.body,
+            status: note.isRead ? 'READ' : 'UNREAD',
+            prId: note.caseId ? caseMap.get(note.caseId) : undefined,
+          })),
+        );
+        setUsers(
+          usersData.map((user) => ({
+            name: user.name,
+            email: user.email,
+            role: user.role,
+          })),
+        );
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchAll();
+    const interval = window.setInterval(fetchAll, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   if (!term) {
     return null;
@@ -68,13 +195,14 @@ export const SearchResults = () => {
 
   const hasResults =
     prMatches.length || supplierMatches.length || notificationMatches.length || userMatches.length;
+  const closeResults = () => setQuery('');
 
   return (
     <div className="fixed inset-0 z-40">
       <button
         type="button"
         aria-label="Close search"
-        onClick={() => setQuery('')}
+        onClick={closeResults}
         className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm dark:bg-slate-950/60"
       />
       <div className="absolute inset-y-0 left-64 right-0 flex items-center justify-center">
@@ -89,7 +217,7 @@ export const SearchResults = () => {
               variant="ghost"
               size="sm"
               aria-label="Close search"
-              onClick={() => setQuery('')}
+              onClick={closeResults}
             >
               <X className="h-4 w-4" />
             </Button>
@@ -123,6 +251,7 @@ export const SearchResults = () => {
                     <Link
                       key={pr.id}
                       href={`/prs/${pr.id}`}
+                      onClick={closeResults}
                       className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
                     >
                       <div>
@@ -143,6 +272,7 @@ export const SearchResults = () => {
                     <Link
                       key={supplier.name}
                       href={`/suppliers/${supplier.name}`}
+                      onClick={closeResults}
                       className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:text-slate-200"
                     >
                       <div>
@@ -187,10 +317,11 @@ export const SearchResults = () => {
 
                     return (
                       <Link
-                        key={note.id}
-                        href={`/prs/${note.prId}`}
-                        className="block rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
-                      >
+                      key={note.id}
+                      href={`/prs/${note.prId}`}
+                      onClick={closeResults}
+                      className="block rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 transition hover:bg-slate-50 dark:border-slate-800 dark:text-slate-200 dark:hover:bg-slate-900"
+                    >
                         <div className="flex items-center justify-between">
                           <p className="font-medium text-slate-800 dark:text-slate-100">
                             {note.title}

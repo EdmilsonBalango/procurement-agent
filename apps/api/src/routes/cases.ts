@@ -1,14 +1,24 @@
 import { FastifyInstance } from 'fastify';
 import {
-  assignCaseSchema,
-  approveExceptionSchema,
-  createCaseSchema,
-  createQuoteSchema,
-  requestQuotesSchema,
-  sendFinalSchema,
-  updateCaseSchema,
-} from '@procurement/shared';
-import { prisma } from '../lib/prisma.js';
+  countQuotesByCase,
+  createCase,
+  createNotification,
+  createOutboundEmailLog,
+  createOutboundEmailLogs,
+  createQuote,
+  getCaseById,
+  getSupplierById,
+  listCaseEvents,
+  listCaseItems,
+  listCases,
+  listChecklistItems,
+  listFilesByCase,
+  listNotificationsByCase,
+  listOutboundEmailsByCase,
+  listQuotesByCase,
+  listUsersByRole,
+  updateCase,
+} from '../lib/db.js';
 import { requireAdmin, requireAuth } from '../lib/require-auth.js';
 import { canMoveToReadyForReview, selectBuyerRoundRobin } from '../lib/rules.js';
 
@@ -17,30 +27,29 @@ export async function caseRoutes(app: FastifyInstance) {
     const { status, buyerId, priority, requesterEmail, dateFrom, dateTo, search } =
       request.query as Record<string, string | undefined>;
 
-    return prisma.case.findMany({
-      where: {
-        status: status as any,
-        priority: priority as any,
-        requesterEmail: requesterEmail ? { contains: requesterEmail } : undefined,
-        assignedBuyerId: buyerId,
-        createdAt: {
-          gte: dateFrom ? new Date(dateFrom) : undefined,
-          lte: dateTo ? new Date(dateTo) : undefined,
-        },
-        OR: search
-          ? [
-              { prNumber: { contains: search } },
-              { subject: { contains: search } },
-              { requesterName: { contains: search } },
-            ]
-          : undefined,
-      },
-      include: {
-        quotes: true,
-        assignedBuyer: true,
-      },
-      orderBy: { createdAt: 'desc' },
+    const records = await listCases({
+      status,
+      priority,
+      requesterEmail,
+      assignedBuyerId: buyerId,
+      dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+      dateTo: dateTo ? new Date(dateTo) : undefined,
+      search,
     });
+
+    const buyers = await listUsersByRole('BUYER');
+    const buyerMap = new Map(buyers.map((buyer) => [buyer.id, buyer]));
+    const withQuotes = await Promise.all(
+      records.map(async (record) => ({
+        ...record,
+        quotes: await listQuotesByCase(record.id),
+        assignedBuyer: record.assignedBuyerId
+          ? buyerMap.get(record.assignedBuyerId) ?? null
+          : null,
+      })),
+    );
+    console.log('Fetched cases with quotes:', withQuotes);
+    return withQuotes;
   });
 
   app.post(
@@ -50,36 +59,53 @@ export async function caseRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const body = request.body as any;
-      return prisma.case.create({
-        data: {
-          ...body,
-          neededBy: new Date(body.neededBy),
-        },
+      return createCase({
+        ...body,
+        neededBy: new Date(body.neededBy),
       });
     },
   );
 
   app.get('/cases/:id', { preHandler: requireAuth }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const record = await prisma.case.findUnique({
-      where: { id },
-      include: {
-        items: true,
-        checklist: true,
-        quotes: { include: { supplier: true } },
-        files: true,
-        outboundEmails: true,
-        notifications: true,
-        events: true,
-        assignedBuyer: true,
-      },
-    });
+    const record = await getCaseById(id);
 
     if (!record) {
       return reply.status(404).send({ message: 'Not found' });
     }
 
-    return record;
+    const [quotes, items, checklist, files, outboundEmails, notifications, events, buyers] =
+      await Promise.all([
+        listQuotesByCase(id),
+        listCaseItems(id),
+        listChecklistItems(id),
+        listFilesByCase(id),
+        listOutboundEmailsByCase(id),
+        listNotificationsByCase(id),
+        listCaseEvents(id),
+        listUsersByRole('BUYER'),
+      ]);
+    const quotesWithSuppliers = await Promise.all(
+      quotes.map(async (quote) => ({
+        ...quote,
+        supplier: await getSupplierById(quote.supplierId),
+      })),
+    );
+    const buyerMap = new Map(buyers.map((buyer) => [buyer.id, buyer]));
+
+    return {
+      ...record,
+      items,
+      checklist,
+      quotes: quotesWithSuppliers,
+      files,
+      outboundEmails,
+      notifications,
+      events,
+      assignedBuyer: record.assignedBuyerId
+        ? buyerMap.get(record.assignedBuyerId) ?? null
+        : null,
+    };
   });
 
   app.patch(
@@ -92,8 +118,8 @@ export async function caseRoutes(app: FastifyInstance) {
       const payload = request.body as any;
 
       if (payload.status === 'READY_FOR_REVIEW') {
-        const quotesCount = await prisma.quote.count({ where: { caseId: id } });
-        const caseRecord = await prisma.case.findUnique({ where: { id } });
+        const quotesCount = await countQuotesByCase(id);
+        const caseRecord = await getCaseById(id);
         const hasException = Boolean(caseRecord?.exceptionApprovedAt);
         if (!canMoveToReadyForReview({ quotesCount, hasException })) {
           return reply
@@ -102,10 +128,11 @@ export async function caseRoutes(app: FastifyInstance) {
         }
       }
 
-      return prisma.case.update({
-        where: { id },
-        data: payload,
-      });
+      const updated = await updateCase(id, payload);
+      if (!updated) {
+        return reply.status(404).send({ message: 'Not found' });
+      }
+      return updated;
     },
   );
 
@@ -121,42 +148,41 @@ export async function caseRoutes(app: FastifyInstance) {
       let resolvedBuyerId = buyerId;
 
       if (!resolvedBuyerId) {
-        const buyers = await prisma.user.findMany({ where: { role: 'BUYER' } });
+        const buyers = await listUsersByRole('BUYER');
         if (buyers.length < 2) {
           return reply.status(400).send({ message: 'Not enough buyers to assign.' });
         }
         const workloads = await Promise.all(
           buyers.map(async (buyer) => ({
             buyerId: buyer.id,
-            count: await prisma.case.count({
-              where: {
-                assignedBuyerId: buyer.id,
-                status: { notIn: ['CLOSED', 'SENT'] },
-              },
-            }),
+            count: (await listCases({
+              assignedBuyerId: buyer.id,
+            })).filter((record) => !['CLOSED', 'SENT'].includes(record.status)).length,
           })),
         );
         resolvedBuyerId = selectBuyerRoundRobin(workloads) ?? undefined;
       }
 
-      const updated = await prisma.case.update({
-        where: { id },
-        data: {
-          assignedBuyerId: resolvedBuyerId,
-          status: 'ASSIGNED',
-        },
+      const updated = await updateCase(id, {
+        assignedBuyerId: resolvedBuyerId,
+        status: 'ASSIGNED',
       });
 
-      await prisma.notification.create({
-        data: {
+      if (!updated) {
+        return reply.status(404).send({ message: 'Not found' });
+      }
+
+      if (resolvedBuyerId) {
+        await createNotification({
           userId: resolvedBuyerId,
           type: 'ASSIGNMENT',
           title: 'New PR assigned',
           body: `${updated.prNumber} assigned to you`,
           caseId: id,
           severity: 'INFO',
-        },
-      });
+          isRead: false,
+        });
+      }
 
       return updated;
     },
@@ -167,16 +193,16 @@ export async function caseRoutes(app: FastifyInstance) {
     {
       preHandler: requireAuth,
     },
-    async (request) => {
+    async (request, reply) => {
       const { id } = request.params as { id: string };
-      const body = request.body as any;
+      const body = request.body as { supplierIds: string[]; messageTemplate?: string };
       const { supplierIds, messageTemplate } = body;
-      const suppliers = await prisma.supplier.findMany({
-        where: { id: { in: supplierIds } },
-      });
+      const suppliers = (
+        await Promise.all(supplierIds.map((supplierId) => getSupplierById(supplierId)))
+      ).filter((supplier): supplier is NonNullable<typeof supplier> => Boolean(supplier));
 
-      await prisma.outboundEmailLog.createMany({
-        data: suppliers.map((supplier) => ({
+      await createOutboundEmailLogs(
+        suppliers.map((supplier) => ({
           caseId: id,
           type: 'RFQ',
           to: JSON.stringify([supplier.email]),
@@ -186,12 +212,12 @@ export async function caseRoutes(app: FastifyInstance) {
           attachmentFileIds: JSON.stringify([]),
           createdBy: request.user?.id,
         })),
-      });
+      );
 
-      const updated = await prisma.case.update({
-        where: { id },
-        data: { status: 'WAITING_QUOTES' },
-      });
+      const updated = await updateCase(id, { status: 'WAITING_QUOTES' });
+      if (!updated) {
+        return reply.status(404).send({ message: 'Not found' });
+      }
 
       return updated;
     },
@@ -205,15 +231,13 @@ export async function caseRoutes(app: FastifyInstance) {
     async (request) => {
       const { id } = request.params as { id: string };
       const body = request.body as any;
-      const quote = await prisma.quote.create({
-        data: {
-          caseId: id,
-          supplierId: body.supplierId,
-          amount: body.amount,
-          currency: body.currency,
-          fileId: body.fileId,
-          notes: body.notes,
-        },
+      const quote = await createQuote({
+        caseId: id,
+        supplierId: body.supplierId,
+        amount: body.amount,
+        currency: body.currency,
+        fileId: body.fileId,
+        notes: body.notes,
       });
       return quote;
     },
@@ -224,17 +248,18 @@ export async function caseRoutes(app: FastifyInstance) {
     {
       preHandler: requireAdmin,
     },
-    async (request) => {
+    async (request, reply) => {
       const { id } = request.params as { id: string };
       const body = request.body as any;
-      return prisma.case.update({
-        where: { id },
-        data: {
-          exceptionApprovedAt: new Date(),
-          exceptionApprovedById: request.user?.id,
-          exceptionReason: body.reason,
-        },
+      const updated = await updateCase(id, {
+        exceptionApprovedAt: new Date(),
+        exceptionApprovedById: request.user?.id,
+        exceptionReason: body.reason,
       });
+      if (!updated) {
+        return reply.status(404).send({ message: 'Not found' });
+      }
+      return updated;
     },
   );
 
@@ -246,39 +271,36 @@ export async function caseRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const body = request.body as any;
-      const caseRecord = await prisma.case.findUnique({ where: { id } });
+      const caseRecord = await getCaseById(id);
       if (!caseRecord || caseRecord.status !== 'READY_TO_SEND') {
         return reply.status(400).send({ message: 'Case not ready to send.' });
       }
 
-      await prisma.outboundEmailLog.create({
-        data: {
-          caseId: id,
-          type: 'FINAL_RESPONSE',
-          to: JSON.stringify([caseRecord.requesterEmail]),
-          cc: JSON.stringify([]),
-          subject: body.subject,
-          body: body.body,
-          attachmentFileIds: JSON.stringify(body.attachmentFileIds ?? []),
-          createdBy: request.user?.id,
-        },
+      await createOutboundEmailLog({
+        caseId: id,
+        type: 'FINAL_RESPONSE',
+        to: JSON.stringify([caseRecord.requesterEmail]),
+        cc: JSON.stringify([]),
+        subject: body.subject,
+        body: body.body,
+        attachmentFileIds: JSON.stringify(body.attachmentFileIds ?? []),
+        createdBy: request.user?.id,
       });
 
-      const updated = await prisma.case.update({
-        where: { id },
-        data: { status: 'SENT' },
-      });
+      const updated = await updateCase(id, { status: 'SENT' });
+      if (!updated) {
+        return reply.status(404).send({ message: 'Not found' });
+      }
 
       if (updated.assignedBuyerId) {
-        await prisma.notification.create({
-          data: {
-            userId: updated.assignedBuyerId,
-            type: 'FINAL_SENT',
-            title: 'Final response sent',
-            body: `${updated.prNumber} final response delivered`,
-            caseId: id,
-            severity: 'INFO',
-          },
+        await createNotification({
+          userId: updated.assignedBuyerId,
+          type: 'FINAL_SENT',
+          title: 'Final response sent',
+          body: `${updated.prNumber} final response delivered`,
+          caseId: id,
+          severity: 'INFO',
+          isRead: false,
         });
       }
 

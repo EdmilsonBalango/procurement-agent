@@ -1,10 +1,12 @@
+import dotenv from 'dotenv';
+import path from 'node:path';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import fastifyStatic from '@fastify/static';
-import path from 'node:path';
 import { authRoutes } from './routes/auth.js';
 import { caseRoutes } from './routes/cases.js';
 import { supplierRoutes } from './routes/suppliers.js';
@@ -12,12 +14,43 @@ import { notificationRoutes } from './routes/notifications.js';
 import { metricsRoutes } from './routes/metrics.js';
 import { fileRoutes } from './routes/files.js';
 import { webhookRoutes } from './routes/webhooks.js';
+import { prRoutes } from './routes/prs.js';
+import { userRoutes } from './routes/users.js';
+import { initDb } from './lib/db.js';
+
+dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
+dotenv.config();
 
 const app = Fastify({
   logger: true,
 });
 
+await initDb();
+
 await app.register(cookie);
+const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+await app.register(cors, {
+  origin: (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    if (process.env.NODE_ENV !== 'production') {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Not allowed'), false);
+  },
+  credentials: true,
+});
 await app.register(multipart);
 
 await app.register(swagger, {
@@ -49,6 +82,8 @@ await app.register(notificationRoutes);
 await app.register(metricsRoutes);
 await app.register(fileRoutes);
 await app.register(webhookRoutes);
+await app.register(prRoutes);
+await app.register(userRoutes);
 
 const port = Number(process.env.PORT ?? 3001);
 

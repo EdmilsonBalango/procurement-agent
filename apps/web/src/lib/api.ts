@@ -1,15 +1,17 @@
 import { QueryClient } from '@tanstack/react-query';
 
-const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+export const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${baseUrl}${path}`, {
+  const headers = { ...(options.headers ?? {}) } as Record<string, string>;
+  if (options.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers ?? {}),
-    },
+    headers,
   });
 
   if (!response.ok) {

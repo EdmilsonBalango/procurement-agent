@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { pipeline } from 'node:stream/promises';
 import fs from 'node:fs';
 import path from 'node:path';
-import { prisma } from '../lib/prisma.js';
+import { createFile, listFilesByCase } from '../lib/db.js';
 import { requireAuth } from '../lib/require-auth.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads');
@@ -20,16 +20,14 @@ export async function fileRoutes(app: FastifyInstance) {
     const targetPath = path.join(uploadDir, storageKey);
     await pipeline(data.file, fs.createWriteStream(targetPath));
 
-    const fileRecord = await prisma.file.create({
-      data: {
-        caseId: id,
-        type: 'PR_ATTACHMENT',
-        filename: data.filename,
-        mimeType: data.mimetype,
-        size: Number(data.fields.size ?? 0),
-        storageKey,
-        uploadedBy: request.user?.id ?? 'system',
-      },
+    const fileRecord = await createFile({
+      caseId: id,
+      type: 'PR_ATTACHMENT',
+      filename: data.filename,
+      mimeType: data.mimetype,
+      size: Number(data.fields.size ?? 0),
+      storageKey,
+      uploadedBy: request.user?.id ?? 'system',
     });
 
     return fileRecord;
@@ -37,6 +35,6 @@ export async function fileRoutes(app: FastifyInstance) {
 
   app.get('/cases/:id/files', { preHandler: requireAuth }, async (request) => {
     const { id } = request.params as { id: string };
-    return prisma.file.findMany({ where: { caseId: id } });
+    return listFilesByCase(id);
   });
 }

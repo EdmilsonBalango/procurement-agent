@@ -1,17 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { PageShell } from '../../../components/page-shell';
 import { DocumentVisualizer } from '../../../components/document-visualizer';
 import {
   Badge,
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
   Button,
   Card,
   CardContent,
@@ -34,7 +28,31 @@ import {
   TableRow,
   VisuallyHidden,
 } from '@procurement/ui';
-import { prRecords } from '../../../lib/mock-data';
+import { apiFetch } from '../../../lib/api';
+import type { PrRecord } from '../../../lib/types';
+
+type ApiCaseSummary = {
+  id: string;
+  prNumber: string;
+  status: PrRecord['status'];
+  subject: string;
+  requesterName: string;
+  department?: string;
+  neededBy: string;
+  priority: PrRecord['priority'];
+  assignedBuyer?: { name: string } | null;
+};
+
+type ApiCaseDetail = ApiCaseSummary & {
+  updatedAt: string;
+  items: Array<{
+    id: string;
+    description: string;
+    qty: number;
+    uom: string;
+    specs: string;
+  }>;
+};
 
 interface Document {
   name: string;
@@ -46,7 +64,7 @@ export default function CaseWorkspacePage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const prId = Array.isArray(params.id) ? params.id[0] : params.id;
-  const pr = prRecords.find((record) => record.id === prId) ?? {
+  const [pr, setPr] = useState<PrRecord>({
     id: prId,
     status: 'NEW',
     summary: 'New procurement request',
@@ -57,11 +75,64 @@ export default function CaseWorkspacePage() {
     quotes: 0,
     updated: 'Just now',
     items: [],
-  };
+  });
   const [assignmentMethod, setAssignmentMethod] = useState('manual');
   const [selectedBuyer, setSelectedBuyer] = useState('buyer-1');
   const [visualizerOpen, setVisualizerOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchCase = async () => {
+      try {
+        const matches = await apiFetch<ApiCaseSummary[]>(`/cases?search=${encodeURIComponent(prId)}`);
+        if (!active) {
+          return;
+        }
+        const match = matches.find((record) => record.prNumber === prId);
+        if (!match) {
+          return;
+        }
+        const detail = await apiFetch<ApiCaseDetail>(`/cases/${match.id}`);
+        if (!active) {
+          return;
+        }
+        setPr({
+          id: detail.prNumber,
+          status: detail.status,
+          summary: detail.subject,
+          neededBy: new Date(detail.neededBy).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
+          requester: detail.requesterName,
+          department: detail.department ?? 'N/S',
+          buyer: detail.assignedBuyer?.name ?? 'Unassigned',
+          priority: detail.priority,
+          quotes: 0,
+          updated: new Date(detail.updatedAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
+          items: detail.items.map((item) => ({
+            details: item.description,
+            quantity: String(item.qty),
+            unit: item.uom,
+            preferredVendor: '—',
+          })),
+        });
+      } catch {
+        // ignore
+      }
+    };
+
+    fetchCase();
+    const interval = window.setInterval(fetchCase, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [prId]);
 
   return (
     <PageShell>
@@ -140,7 +211,7 @@ export default function CaseWorkspacePage() {
         <Tabs defaultValue="overview">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="checklist">Checklist</TabsTrigger>
+            {/* <TabsTrigger value="checklist">Checklist</TabsTrigger> */}
             <TabsTrigger value="quotes">Quotes & Suppliers</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
@@ -156,15 +227,15 @@ export default function CaseWorkspacePage() {
                 <CardContent className="space-y-3 text-sm text-slate-600">
                   <div className="flex items-center justify-between">
                     <span>Requester</span>
-                    <span className="font-medium text-slate-800">Jamie Parker</span>
+                    <span className="font-medium text-slate-800">{pr.requester}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Department</span>
-                    <span className="font-medium text-slate-800">Marketing</span>
+                    <span className="font-medium text-slate-800">{pr.department} Department</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span>Budget</span>
-                    <span className="font-medium text-slate-800">$18,500</span>
+                    <span className="font-medium text-slate-800">N/S</span>
                   </div>
                 </CardContent>
               </Card>

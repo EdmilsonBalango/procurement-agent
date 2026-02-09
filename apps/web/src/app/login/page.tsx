@@ -7,7 +7,7 @@ import { apiFetch } from '../../lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('admin@local');
+  const [email, setEmail] = useState('edmilsonbalango34@gmail.com');
   const [password, setPassword] = useState('Password123!');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
