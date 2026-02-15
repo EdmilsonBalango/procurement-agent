@@ -23,6 +23,12 @@ const navItems = [
 export const Sidebar = () => {
   const [role, setRole] = useState<string | null>(null);
   const [cases, setCases] = useState<ApiCaseRecord[]>([]);
+  const visibleNavItems = useMemo(() => {
+    if (role === 'ADMIN') {
+      return navItems;
+    }
+    return navItems.filter((item) => item.href !== '/prs/all');
+  }, [role]);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +88,7 @@ export const Sidebar = () => {
         <h1 className="mt-2 text-xl font-semibold text-heading dark:text-slate-100">PR Workflow</h1>
       </div>
       <nav className="flex flex-1 flex-col gap-2">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const Icon = item.icon;
           return (
             <Link

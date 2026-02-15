@@ -150,35 +150,39 @@ export const SearchResults = () => {
     };
   }, []);
 
-  if (!term) {
-    return null;
-  }
-
   const needle = normalize(term);
 
-  const prMatches = prRecords.filter((pr) =>
-    [pr.id, pr.summary, pr.requester, pr.buyer].some((field) =>
-      normalize(field).includes(needle),
-    ),
-  );
+  const prMatches = term
+    ? prRecords.filter((pr) =>
+        [pr.id, pr.summary, pr.requester, pr.buyer].some((field) =>
+          normalize(field).includes(needle),
+        ),
+      )
+    : [];
 
-  const supplierMatches = suppliers.filter((supplier) =>
-    [supplier.name, supplier.categories, supplier.email, supplier.location].some((field) =>
-      normalize(field).includes(needle),
-    ),
-  );
+  const supplierMatches = term
+    ? suppliers.filter((supplier) =>
+        [supplier.name, supplier.categories, supplier.email, supplier.location].some((field) =>
+          normalize(field).includes(needle),
+        ),
+      )
+    : [];
 
-  const notificationMatches = notifications.filter((note) =>
-    [note.title, note.body, note.prId ?? ''].some((field) =>
-      normalize(field).includes(needle),
-    ),
-  );
+  const notificationMatches = term
+    ? notifications.filter((note) =>
+        [note.title, note.body, note.prId ?? ''].some((field) =>
+          normalize(field).includes(needle),
+        ),
+      )
+    : [];
 
-  const userMatches = users.filter((user) =>
-    [user.name, user.email, user.role].some((field) =>
-      normalize(field).includes(needle),
-    ),
-  );
+  const userMatches = term
+    ? users.filter((user) =>
+        [user.name, user.email, user.role].some((field) =>
+          normalize(field).includes(needle),
+        ),
+      )
+    : [];
 
   const sections = useMemo(
     () => [
@@ -196,6 +200,10 @@ export const SearchResults = () => {
   const hasResults =
     prMatches.length || supplierMatches.length || notificationMatches.length || userMatches.length;
   const closeResults = () => setQuery('');
+
+  if (!term) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-40">
@@ -271,7 +279,7 @@ export const SearchResults = () => {
                   {supplierMatches.map((supplier) => (
                     <Link
                       key={supplier.name}
-                      href={`/suppliers/${supplier.name}`}
+                      href="/suppliers"
                       onClick={closeResults}
                       className="flex items-center justify-between rounded-lg border border-slate-200 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:text-slate-200"
                     >
@@ -304,7 +312,7 @@ export const SearchResults = () => {
                             <p className="font-medium text-slate-800 dark:text-slate-100">
                               {note.title}
                             </p>
-                            <Badge variant={note.status === 'UNREAD' ? 'default' : 'secondary'}>
+                            <Badge variant="default">
                               {note.status}
                             </Badge>
                           </div>
@@ -326,7 +334,7 @@ export const SearchResults = () => {
                           <p className="font-medium text-slate-800 dark:text-slate-100">
                             {note.title}
                           </p>
-                          <Badge variant={note.status === 'UNREAD' ? 'default' : 'secondary'}>
+                          <Badge variant="default">
                             {note.status}
                           </Badge>
                         </div>

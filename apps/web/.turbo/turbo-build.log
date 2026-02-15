@@ -1,7 +1,10 @@
 
+
 > @procurement/web@0.1.0 build /Users/edmilsonbalango/procurement-agent/apps/web
 > next build
 
-⨯ Unable to acquire lock at /Users/edmilsonbalango/procurement-agent/apps/web/.next/lock, is another instance of next build running?
-  Suggestion: If you intended to restart next build, terminate the other process, and then try again.
- ELIFECYCLE  Command failed with exit code 1.
+[1m[38;2;173;127;168m▲ Next.js 16.1.6[39m[22m (Turbopack)
+
+[33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[37m[1m [22m[39m Creating an optimized production build ...
+[41m[30m ELIFECYCLE [39m[49m [31mCommand failed with exit code 130.[39m

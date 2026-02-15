@@ -2,6 +2,12 @@ import * as React from 'react';
 import { cn } from '../utils';
 import { getStatusColors } from '../utils/status-colors';
 
+const fallbackColors = {
+  bg: 'bg-slate-50',
+  text: 'text-slate-600',
+  border: 'border-slate-200',
+};
+
 export interface BadgeProps extends React.HTMLAttributes<HTMLSpanElement> {
   variant?: 'default' | 'case' | 'priority' | 'checklist' | 'severity' | 'role';
   statusType?: 'case' | 'priority' | 'checklist' | 'severity' | 'role';
@@ -15,7 +21,7 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
 
     // If status-based coloring is requested
     if (variant !== 'default' && status) {
-      const colors = getStatusColors(status, statusType || variant);
+      const colors = getStatusColors(status, statusType || variant) ?? fallbackColors;
       return (
         <span
           ref={ref}

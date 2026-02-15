@@ -46,6 +46,7 @@ type NotificationContextValue = {
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
+
 const getPreferredTheme = (): ThemeMode => {
   if (typeof window === 'undefined') {
     return 'light';
@@ -82,6 +83,7 @@ export const useNotifications = () => {
   }
   return context;
 };
+
 
 const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const [theme, setTheme] = useState<ThemeMode>('light');
@@ -156,7 +158,7 @@ const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
   const pushToast = (toast: Omit<Toast, 'id'> & { durationMs?: number }) => {
     const id = `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const durationMs = toast.durationMs ?? 4500;
+    const durationMs = toast.durationMs ?? 10000;
     setToasts((prev) => [...prev, { ...toast, id }]);
     const timeoutId = window.setTimeout(() => dismissToast(id), durationMs);
     timeouts.current.set(id, timeoutId);
@@ -206,18 +208,14 @@ const NotificationProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
         seenNotifications.current.add(note.id);
-        if (note.type !== 'NEW_PR') {
-          return;
+        if (note.type === 'NEW_PR' || note.type === 'ASSIGNMENT') {
+          pushToast({
+            title: note.title || 'Notification',
+            message: note.body,
+            tone: note.severity === 'INFO' ? 'info' : 'success',
+          });
         }
-        pushToast({
-          title: note.title || 'Notification',
-          message: note.body,
-          tone: note.severity === 'INFO' ? 'info' : 'success',
-        });
-        fetch(`${apiBaseUrl}/notifications/${note.id}/read`, {
-          method: 'PATCH',
-          credentials: 'include',
-        }).catch(() => undefined);
+        // Leave unread until user opens the PR/notification.
       });
 
       source.onerror = () => {
@@ -264,15 +262,19 @@ const ToastViewport = ({
         key={toast.id}
         role="status"
         aria-live="polite"
-        className="motion-alert pointer-events-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-lg dark:border-slate-800 dark:bg-slate-900"
+        className={`motion-alert pointer-events-auto rounded-2xl border p-4 shadow-lg ${
+          toast.tone === 'warning'
+            ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100'
+        }`}
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <p className="text-sm font-semibold">
               {toast.title}
             </p>
             {toast.message ? (
-              <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              <p className="mt-1 text-xs opacity-80">
                 {toast.message}
               </p>
             ) : null}
@@ -280,7 +282,7 @@ const ToastViewport = ({
           <button
             type="button"
             onClick={() => onDismiss(toast.id)}
-            className="rounded-full p-1 text-slate-400 transition hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-200"
+            className="rounded-full p-1 text-emerald-700/70 transition hover:text-emerald-900 dark:text-emerald-200/70 dark:hover:text-emerald-100"
             aria-label="Dismiss notification"
           >
             ✕

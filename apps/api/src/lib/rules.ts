@@ -16,7 +16,7 @@ export function canMoveToReadyForReview({
   quotesCount: number;
   hasException: boolean;
 }) {
-  return quotesCount >= 3 || hasException;
+  return quotesCount >= 1 || hasException;
 }
 
 export function selectBuyerRoundRobin(

@@ -31,38 +31,60 @@ type ApiCaseRecord = {
   quotes?: Array<{ id: string }>;
 };
 
+type ApiMe = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'BUYER';
+};
+
 export default function DashboardPage() {
   const router = useRouter();
   const [billing, setBilling] = useState('monthly');
   const [records, setRecords] = useState<PrRecord[]>([]);
+  const [currentUser, setCurrentUser] = useState<ApiMe | null>(null);
 
   useEffect(() => {
     let active = true;
-    const fetchCases = () =>
-      apiFetch<ApiCaseRecord[]>('/cases')
-        .then((data) => {
-          if (!active) {
-            return;
-          }
-          const mapped = data.map((record) => ({
-            id: record.prNumber,
-            status: record.status,
-            summary: record.subject,
-            neededBy: 'TBD',
-            requester: record.requesterName,
-            buyer: record.assignedBuyer?.name ?? 'Unassigned',
-            priority: record.priority,
-            quotes: record.quotes?.length ?? 0,
-            updated: new Date(record.updatedAt).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-            }),
-            items: [],
-          }));
-          console.log('Fetched cases:', mapped);
-          setRecords(mapped);
-        })
-        .catch(() => undefined);
+    const fetchCases = async () => {
+      try {
+        const me = currentUser ?? (await apiFetch<ApiMe>('/auth/me'));
+        if (!active) {
+          return;
+        }
+        if (!currentUser) {
+          setCurrentUser(me);
+        }
+        const path =
+          me.role === 'ADMIN' ? '/cases' : `/cases?buyerId=${encodeURIComponent(me.id)}`;
+        const data = await apiFetch<ApiCaseRecord[]>(path);
+        if (!active) {
+          return;
+        }
+        const mapped = data.map((record) => ({
+          id: record.prNumber,
+          status:
+            (record.quotes?.length ?? 0) > 0 &&
+            ['NEW', 'ASSIGNED', 'WAITING_QUOTES'].includes(record.status)
+              ? 'READY_FOR_REVIEW'
+              : record.status,
+          summary: record.subject,
+          neededBy: 'TBD',
+          requester: record.requesterName,
+          buyer: record.assignedBuyer?.name ?? 'Unassigned',
+          priority: record.priority,
+          quotes: record.quotes?.length ?? 0,
+          updated: new Date(record.updatedAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
+          items: [],
+        }));
+        setRecords(mapped);
+      } catch {
+        // ignore
+      }
+    };
 
     fetchCases();
     const interval = window.setInterval(fetchCases, 10000);
@@ -70,7 +92,7 @@ export default function DashboardPage() {
       active = false;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [currentUser]);
 
   const stageData = useMemo(() => {
     const stageConfig: Array<{ label: string; status: PrRecord['status'] }> = [

@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import {
   countQuotesByCase,
   createCase,
+  createCaseEvent,
   createNotification,
   createOutboundEmailLog,
   createOutboundEmailLogs,
@@ -12,11 +13,13 @@ import {
   listCaseItems,
   listCases,
   listChecklistItems,
+  listNotesByCase,
   listFilesByCase,
   listNotificationsByCase,
   listOutboundEmailsByCase,
   listQuotesByCase,
   listUsersByRole,
+  createNote,
   updateCase,
 } from '../lib/db.js';
 import { requireAdmin, requireAuth } from '../lib/require-auth.js';
@@ -26,12 +29,15 @@ export async function caseRoutes(app: FastifyInstance) {
   app.get('/cases', { preHandler: requireAuth }, async (request) => {
     const { status, buyerId, priority, requesterEmail, dateFrom, dateTo, search } =
       request.query as Record<string, string | undefined>;
+    const user = request.user;
+    const resolvedBuyerId =
+      user && user.role !== 'ADMIN' ? user.id : buyerId;
 
     const records = await listCases({
       status,
       priority,
       requesterEmail,
-      assignedBuyerId: buyerId,
+      assignedBuyerId: resolvedBuyerId,
       dateFrom: dateFrom ? new Date(dateFrom) : undefined,
       dateTo: dateTo ? new Date(dateTo) : undefined,
       search,
@@ -48,7 +54,7 @@ export async function caseRoutes(app: FastifyInstance) {
           : null,
       })),
     );
-    console.log('Fetched cases with quotes:', withQuotes);
+  
     return withQuotes;
   });
 
@@ -59,10 +65,17 @@ export async function caseRoutes(app: FastifyInstance) {
     },
     async (request) => {
       const body = request.body as any;
-      return createCase({
+      const created = await createCase({
         ...body,
         neededBy: new Date(body.neededBy),
       });
+      await createCaseEvent({
+        caseId: created.id,
+        actorUserId: request.user?.id,
+        type: 'CREATED',
+        detailJson: JSON.stringify({ prNumber: created.prNumber }),
+      });
+      return created;
     },
   );
 
@@ -73,8 +86,12 @@ export async function caseRoutes(app: FastifyInstance) {
     if (!record) {
       return reply.status(404).send({ message: 'Not found' });
     }
+    const user = request.user;
+    if (user && user.role !== 'ADMIN' && record.assignedBuyerId !== user.id) {
+      return reply.status(404).send({ message: 'Not found' });
+    }
 
-    const [quotes, items, checklist, files, outboundEmails, notifications, events, buyers] =
+    const [quotes, items, checklist, files, outboundEmails, notifications, events, buyers, notes] =
       await Promise.all([
         listQuotesByCase(id),
         listCaseItems(id),
@@ -84,6 +101,7 @@ export async function caseRoutes(app: FastifyInstance) {
         listNotificationsByCase(id),
         listCaseEvents(id),
         listUsersByRole('BUYER'),
+        listNotesByCase(id),
       ]);
     const quotesWithSuppliers = await Promise.all(
       quotes.map(async (quote) => ({
@@ -102,6 +120,7 @@ export async function caseRoutes(app: FastifyInstance) {
       outboundEmails,
       notifications,
       events,
+      notes,
       assignedBuyer: record.assignedBuyerId
         ? buyerMap.get(record.assignedBuyerId) ?? null
         : null,
@@ -116,10 +135,11 @@ export async function caseRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const { id } = request.params as { id: string };
       const payload = request.body as any;
+      const before = await getCaseById(id);
 
       if (payload.status === 'READY_FOR_REVIEW') {
         const quotesCount = await countQuotesByCase(id);
-        const caseRecord = await getCaseById(id);
+        const caseRecord = before;
         const hasException = Boolean(caseRecord?.exceptionApprovedAt);
         if (!canMoveToReadyForReview({ quotesCount, hasException })) {
           return reply
@@ -131,6 +151,14 @@ export async function caseRoutes(app: FastifyInstance) {
       const updated = await updateCase(id, payload);
       if (!updated) {
         return reply.status(404).send({ message: 'Not found' });
+      }
+      if (before && payload.status && payload.status !== before.status) {
+        await createCaseEvent({
+          caseId: id,
+          actorUserId: request.user?.id,
+          type: 'STATUS_CHANGE',
+          detailJson: JSON.stringify({ from: before.status, to: payload.status }),
+        });
       }
       return updated;
     },
@@ -163,9 +191,20 @@ export async function caseRoutes(app: FastifyInstance) {
         resolvedBuyerId = selectBuyerRoundRobin(workloads) ?? undefined;
       }
 
+      const before = await getCaseById(id);
+      const shouldPreserveStatus = before
+        ? [
+            'WAITING_QUOTES',
+            'READY_FOR_REVIEW',
+            'READY_TO_SEND',
+            'CLOSED_PAID',
+            'SENT',
+            'CLOSED',
+          ].includes(before.status)
+        : false;
       const updated = await updateCase(id, {
         assignedBuyerId: resolvedBuyerId,
-        status: 'ASSIGNED',
+        status: shouldPreserveStatus ? before?.status : 'ASSIGNED',
       });
 
       if (!updated) {
@@ -181,6 +220,23 @@ export async function caseRoutes(app: FastifyInstance) {
           caseId: id,
           severity: 'INFO',
           isRead: false,
+        });
+      }
+
+      if (before && before.status !== updated.status) {
+        await createCaseEvent({
+          caseId: id,
+          actorUserId: request.user?.id,
+          type: 'STATUS_CHANGE',
+          detailJson: JSON.stringify({ from: before.status, to: updated.status }),
+        });
+      }
+      if (resolvedBuyerId) {
+        await createCaseEvent({
+          caseId: id,
+          actorUserId: request.user?.id,
+          type: 'ASSIGNMENT',
+          detailJson: JSON.stringify({ assignedBuyerId: resolvedBuyerId }),
         });
       }
 
@@ -214,12 +270,47 @@ export async function caseRoutes(app: FastifyInstance) {
         })),
       );
 
+      const before = await getCaseById(id);
       const updated = await updateCase(id, { status: 'WAITING_QUOTES' });
       if (!updated) {
         return reply.status(404).send({ message: 'Not found' });
       }
+      if (before && before.status !== updated.status) {
+        await createCaseEvent({
+          caseId: id,
+          actorUserId: request.user?.id,
+          type: 'STATUS_CHANGE',
+          detailJson: JSON.stringify({ from: before.status, to: updated.status }),
+        });
+      }
+      await createCaseEvent({
+        caseId: id,
+        actorUserId: request.user?.id,
+        type: 'RFQ_SENT',
+        detailJson: JSON.stringify({ supplierIds }),
+      });
 
       return updated;
+    },
+  );
+
+  app.post(
+    '/cases/:id/notes',
+    {
+      preHandler: requireAuth,
+    },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = request.body as { body?: string };
+      if (!body.body || body.body.trim().length === 0) {
+        return reply.status(400).send({ message: 'Note body is required.' });
+      }
+      const note = await createNote({
+        caseId: id,
+        authorUserId: request.user?.id,
+        body: body.body.trim(),
+      });
+      return note;
     },
   );
 
@@ -231,6 +322,7 @@ export async function caseRoutes(app: FastifyInstance) {
     async (request) => {
       const { id } = request.params as { id: string };
       const body = request.body as any;
+      const before = await getCaseById(id);
       const quote = await createQuote({
         caseId: id,
         supplierId: body.supplierId,
@@ -239,6 +331,17 @@ export async function caseRoutes(app: FastifyInstance) {
         fileId: body.fileId,
         notes: body.notes,
       });
+      if (before && !['CLOSED', 'SENT'].includes(before.status)) {
+        const updated = await updateCase(id, { status: 'READY_FOR_REVIEW' });
+        if (updated && before.status !== updated.status) {
+          await createCaseEvent({
+            caseId: id,
+            actorUserId: request.user?.id,
+            type: 'STATUS_CHANGE',
+            detailJson: JSON.stringify({ from: before.status, to: updated.status }),
+          });
+        }
+      }
       return quote;
     },
   );
@@ -259,6 +362,12 @@ export async function caseRoutes(app: FastifyInstance) {
       if (!updated) {
         return reply.status(404).send({ message: 'Not found' });
       }
+      await createCaseEvent({
+        caseId: id,
+        actorUserId: request.user?.id,
+        type: 'EXCEPTION_APPROVED',
+        detailJson: JSON.stringify({ reason: body.reason }),
+      });
       return updated;
     },
   );
@@ -291,6 +400,13 @@ export async function caseRoutes(app: FastifyInstance) {
       if (!updated) {
         return reply.status(404).send({ message: 'Not found' });
       }
+
+      await createCaseEvent({
+        caseId: id,
+        actorUserId: request.user?.id,
+        type: 'FINAL_SENT',
+        detailJson: JSON.stringify({ subject: body.subject }),
+      });
 
       if (updated.assignedBuyerId) {
         await createNotification({

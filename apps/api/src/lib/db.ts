@@ -39,6 +39,9 @@ export type Supplier = {
   email: string;
   categories: string;
   isActive: boolean;
+  phonePrimary?: string | null;
+  phoneSecondary?: string | null;
+  location?: string | null;
   createdAt: Date;
 };
 
@@ -138,6 +141,15 @@ export type CaseEvent = {
   createdAt: Date;
 };
 
+export type Note = {
+  id: string;
+  caseId: string;
+  authorUserId?: string | null;
+  body: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 const notificationEvents = new EventEmitter();
 
 const priorities = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
@@ -157,7 +169,7 @@ const now = () => new Date();
 const userSelect =
   'select id, name, email, role, password_hash as passwordHash, last_mfa_at as lastMfaAt, created_at as createdAt, updated_at as updatedAt from users';
 const supplierSelect =
-  'select id, name, email, categories, is_active as isActive, created_at as createdAt from suppliers';
+  'select id, name, email, categories, is_active as isActive, phone_primary as phonePrimary, phone_secondary as phoneSecondary, location, created_at as createdAt from suppliers';
 const caseSelect =
   'select id, pr_number as prNumber, subject, requester_name as requesterName, requester_email as requesterEmail, department, priority, needed_by as neededBy, cost_center as costCenter, delivery_location as deliveryLocation, budget_estimate as budgetEstimate, status, assigned_buyer_id as assignedBuyerId, exception_approved_by_id as exceptionApprovedById, exception_approved_at as exceptionApprovedAt, exception_reason as exceptionReason, created_at as createdAt, updated_at as updatedAt, summary_for_procurement as summaryForProcurement from cases';
 const caseItemSelect =
@@ -174,6 +186,8 @@ const notificationSelect =
   'select id, user_id as userId, type, title, body, case_id as caseId, severity, is_read as isRead, created_at as createdAt from notifications';
 const caseEventSelect =
   'select id, case_id as caseId, actor_user_id as actorUserId, type, detail_json as detailJson, created_at as createdAt from case_events';
+const noteSelect =
+  'select id, case_id as caseId, author_user_id as authorUserId, body, created_at as createdAt, updated_at as updatedAt from notes';
 
 export async function initDb() {
   await query('select 1');
@@ -251,13 +265,16 @@ async function ensureSeedData() {
 
     for (let index = 0; index < 10; index += 1) {
       await conn.execute(
-        'insert into suppliers (id, name, email, categories, is_active, created_at) values (?, ?, ?, ?, ?, ?)',
+        'insert into suppliers (id, name, email, categories, is_active, phone_primary, phone_secondary, location, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           randomUUID(),
           `Supplier ${index + 1}`,
           `supplier${index + 1}@example.com`,
           JSON.stringify(['IT', 'Facilities', 'Marketing'].slice(0, (index % 3) + 1)),
           true,
+          null,
+          null,
+          null,
           now(),
         ],
       );
@@ -554,13 +571,16 @@ export async function createSupplier(data: Omit<Supplier, 'id' | 'createdAt'>) {
     ...data,
   };
   await execute(
-    'insert into suppliers (id, name, email, categories, is_active, created_at) values (?, ?, ?, ?, ?, ?)',
+    'insert into suppliers (id, name, email, categories, is_active, phone_primary, phone_secondary, location, created_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       supplier.id,
       supplier.name,
       supplier.email,
       supplier.categories,
       supplier.isActive,
+      supplier.phonePrimary ?? null,
+      supplier.phoneSecondary ?? null,
+      supplier.location ?? null,
       supplier.createdAt,
     ],
   );
@@ -586,12 +606,29 @@ export async function updateSupplier(id: string, data: Partial<Supplier>) {
     fields.push('is_active = ?');
     params.push(data.isActive);
   }
+  if (data.phonePrimary !== undefined) {
+    fields.push('phone_primary = ?');
+    params.push(data.phonePrimary);
+  }
+  if (data.phoneSecondary !== undefined) {
+    fields.push('phone_secondary = ?');
+    params.push(data.phoneSecondary);
+  }
+  if (data.location !== undefined) {
+    fields.push('location = ?');
+    params.push(data.location);
+  }
   if (fields.length === 0) {
     return getSupplierById(id);
   }
   params.push(id);
   await execute(`update suppliers set ${fields.join(', ')} where id = ?`, params);
   return getSupplierById(id);
+}
+
+export async function deleteSupplier(id: string) {
+  await execute('delete from suppliers where id = ?', [id]);
+  return true;
 }
 
 export async function listCases(filters: {
@@ -969,6 +1006,31 @@ export async function createCaseEvent(data: Omit<CaseEvent, 'id' | 'createdAt'>)
     ],
   );
   return event;
+}
+
+export async function listNotesByCase(caseId: string) {
+  return query<Note>(`${noteSelect} where case_id = ? order by created_at desc`, [caseId]);
+}
+
+export async function createNote(data: Omit<Note, 'id' | 'createdAt' | 'updatedAt'>) {
+  const note: Note = {
+    id: randomUUID(),
+    createdAt: now(),
+    updatedAt: now(),
+    ...data,
+  };
+  await execute(
+    'insert into notes (id, case_id, author_user_id, body, created_at, updated_at) values (?, ?, ?, ?, ?, ?)',
+    [
+      note.id,
+      note.caseId,
+      note.authorUserId ?? null,
+      note.body,
+      note.createdAt,
+      note.updatedAt,
+    ],
+  );
+  return note;
 }
 
 export async function getSupplierById(id: string) {

@@ -61,7 +61,7 @@ export default function NotificationsPage() {
           return;
         }
         const caseMap = new Map(cases.map((record) => [record.id, record.prNumber]));
-        const mapped = notes.map((note) => ({
+        const mapped: UiNotification[] = notes.map((note) => ({
           id: note.id,
           title: note.title,
           body: note.body,
@@ -114,7 +114,7 @@ export default function NotificationsPage() {
                     <div className="flex items-center justify-between">
                       <p className={titleClassName}>{note.title}</p>
                       <Badge
-                        variant={note.status === 'UNREAD' ? 'default' : 'secondary'}
+                        variant="default"
                         className={
                           note.status === 'UNREAD'
                             ? 'border-emerald-600 bg-emerald-600 text-white'

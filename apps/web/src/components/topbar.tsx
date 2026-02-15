@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, LogOut, Moon, Search, Sun, UserCircle } from 'lucide-react';
 import { Button, Card, CardContent } from '@procurement/ui';
 import { useRouter } from 'next/navigation';
@@ -12,8 +12,13 @@ export const Topbar = () => {
   const { query, setQuery } = useSearch();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [notifications, setNotifications] = useState<
+    Array<{ id: string; title: string; body: string; isRead: boolean; createdAt?: string }>
+  >([]);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const alertsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +51,68 @@ export const Topbar = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (!alertsOpen) {
+      return;
+    }
+    const handleClick = (event: MouseEvent) => {
+      if (!alertsRef.current?.contains(event.target as Node)) {
+        setAlertsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [alertsOpen]);
+
+  useEffect(() => {
+    let active = true;
+    const fetchNotifications = async () => {
+      try {
+        const data = await apiFetch<
+          Array<{ id: string; title: string; body: string; isRead: boolean; createdAt?: string }>
+        >('/notifications');
+        if (!active) {
+          return;
+        }
+        setNotifications(data);
+      } catch {
+        // ignore
+      }
+    };
+    fetchNotifications();
+    const interval = window.setInterval(fetchNotifications, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  const unreadNotifications = useMemo(
+    () => notifications.filter((note) => !note.isRead),
+    [notifications],
+  );
+  const recentNotifications = useMemo(
+    () => notifications.slice(0, 5),
+    [notifications],
+  );
+
+  const clearUnread = async () => {
+    const unread = notifications.filter((note) => !note.isRead);
+    if (unread.length === 0) {
+      return;
+    }
+    try {
+      await Promise.all(
+        unread.map((note) =>
+          apiFetch(`/notifications/${note.id}/read`, { method: 'PATCH' }),
+        ),
+      );
+      setNotifications((prev) => prev.filter((note) => note.isRead));
+    } catch {
+      // ignore
+    }
+  };
+
   const handleLogout = async () => {
     try {
       await apiFetch('/auth/logout', { method: 'POST' });
@@ -74,10 +141,91 @@ export const Topbar = () => {
         >
           {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </Button>
-        <Button variant="secondary" size="sm">
-          <Bell className="mr-2 h-4 w-4" />
-          Alerts
-        </Button>
+        <div className="relative" ref={alertsRef}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setAlertsOpen((prev) => !prev)}
+          >
+            <span className="relative mr-2">
+              <Bell className="h-4 w-4" />
+              {unreadNotifications.length > 0 ? (
+                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-amber-400" />
+              ) : null}
+            </span>
+            Alerts
+          </Button>
+          {alertsOpen ? (
+            <Card className="absolute right-0 mt-3 w-[320px] border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-950">
+              <CardContent className="space-y-4 p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Alerts
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={clearUnread}
+                    disabled={unreadNotifications.length === 0}
+                  >
+                    Clear
+                  </Button>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    New Notifications
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {unreadNotifications.length === 0 ? (
+                      <p className="text-xs text-slate-500">No new notifications.</p>
+                    ) : (
+                      unreadNotifications.slice(0, 5).map((note) => (
+                        <div key={note.id} className="rounded-lg border border-amber-100 bg-amber-50 p-2">
+                          <p className="text-sm font-semibold text-slate-800">{note.title}</p>
+                          <p className="text-xs text-slate-600">{note.body}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Unread
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {unreadNotifications.length === 0 ? (
+                      <p className="text-xs text-slate-500">All caught up.</p>
+                    ) : (
+                      unreadNotifications.map((note) => (
+                        <div key={note.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                          <p className="text-sm font-semibold text-slate-800">{note.title}</p>
+                          <p className="text-xs text-slate-600">{note.body}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+                {/* <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Recent
+                  </p>
+                  <div className="mt-2 space-y-2">
+                    {recentNotifications.length === 0 ? (
+                      <p className="text-xs text-slate-500">No notifications yet.</p>
+                    ) : (
+                      recentNotifications.map((note) => (
+                        <div key={note.id} className="rounded-lg border border-slate-200 p-2">
+                          <p className="text-sm font-semibold text-slate-800">{note.title}</p>
+                          <p className="text-xs text-slate-600">{note.body}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div> */}
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
         <div className="relative" ref={menuRef}>
           <button
             type="button"

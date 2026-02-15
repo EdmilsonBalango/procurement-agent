@@ -20,39 +20,59 @@ type ApiCaseRecord = {
   quotes?: Array<{ id: string }>;
 };
 
+type ApiMe = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'BUYER';
+};
+
 export default function AllPrsPage() {
   const router = useRouter();
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [buyerFilter, setBuyerFilter] = useState<string[]>([]);
   const [records, setRecords] = useState<PrRecord[]>([]);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
 
   useEffect(() => {
     let active = true;
-    const fetchCases = () =>
-      apiFetch<ApiCaseRecord[]>('/cases')
-        .then((records) => {
-          if (!active) {
-            return;
-          }
-          const mapped = records.map((record) => ({
-            id: record.prNumber,
-            status: record.status,
-            summary: record.subject,
-            neededBy: 'TBD',
-            requester: record.requesterName,
-            buyer: record.assignedBuyer?.name ?? 'Unassigned',
-            priority: record.priority,
-            quotes: record.quotes?.length ?? 0,
-            updated: new Date(record.updatedAt).toLocaleDateString('en-US', {
-              month: 'short',
-              day: 'numeric',
-            }),
-            items: [],
-          }));
-          setRecords(mapped);
-        })
-        .catch(() => undefined);
+    const fetchCases = async () => {
+      try {
+        const me = await apiFetch<ApiMe>('/auth/me');
+        if (!active) {
+          return;
+        }
+        if (me.role !== 'ADMIN') {
+          setIsAdmin(false);
+          router.replace('/prs/inbox');
+          return;
+        }
+        setIsAdmin(true);
+        const records = await apiFetch<ApiCaseRecord[]>('/cases');
+        if (!active) {
+          return;
+        }
+        const mapped = records.map((record) => ({
+          id: record.prNumber,
+          status: record.status,
+          summary: record.subject,
+          neededBy: 'TBD',
+          requester: record.requesterName,
+          buyer: record.assignedBuyer?.name ?? 'Unassigned',
+          priority: record.priority,
+          quotes: record.quotes?.length ?? 0,
+          updated: new Date(record.updatedAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
+          items: [],
+        }));
+        setRecords(mapped);
+      } catch {
+        // ignore
+      }
+    };
 
     fetchCases();
     const interval = window.setInterval(fetchCases, 10000);
@@ -60,7 +80,7 @@ export default function AllPrsPage() {
       active = false;
       window.clearInterval(interval);
     };
-  }, []);
+  }, [router]);
 
   const statusOptions = useMemo(
     () => Array.from(new Set(records.map((pr) => pr.status))),
@@ -90,6 +110,10 @@ export default function AllPrsPage() {
     }
     setValue([...current, value]);
   };
+
+  if (isAdmin === false) {
+    return null;
+  }
 
   return (
     <PageShell>

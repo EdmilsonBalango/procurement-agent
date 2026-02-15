@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { createSupplier, listSuppliers, updateSupplier } from '../lib/db.js';
+import { createSupplier, deleteSupplier, listSuppliers, updateSupplier } from '../lib/db.js';
 import { requireAuth } from '../lib/require-auth.js';
 
 export async function supplierRoutes(app: FastifyInstance) {
@@ -27,6 +27,16 @@ export async function supplierRoutes(app: FastifyInstance) {
         return reply.status(404).send({ message: 'Not found' });
       }
       return updated;
+    },
+  );
+
+  app.delete(
+    '/suppliers/:id',
+    { preHandler: requireAuth },
+    async (request, reply) => {
+      const { id } = request.params as { id: string };
+      await deleteSupplier(id);
+      return reply.status(204).send();
     },
   );
 }

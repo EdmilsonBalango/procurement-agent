@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Card, CardContent, CardHeader } from '@procurement/ui';
 import { apiFetch } from '../../lib/api';
 
-export default function MfaPage() {
+function MfaPageContent() {
   const router = useRouter();
   const params = useSearchParams();
   const email = params.get('email') ?? '';
@@ -80,5 +80,13 @@ export default function MfaPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function MfaPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <MfaPageContent />
+    </Suspense>
   );
 }

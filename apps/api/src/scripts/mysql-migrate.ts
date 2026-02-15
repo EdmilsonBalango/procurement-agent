@@ -45,6 +45,9 @@ const schemaStatements = [
     email varchar(255) not null,
     categories text not null,
     is_active boolean not null,
+    phone_primary varchar(64) null,
+    phone_secondary varchar(64) null,
+    location varchar(255) null,
     created_at datetime not null,
     index idx_suppliers_active (is_active)
   )`,
@@ -148,6 +151,15 @@ const schemaStatements = [
     created_at datetime not null,
     index idx_case_events_case (case_id)
   )`,
+  `create table if not exists notes (
+    id char(36) primary key,
+    case_id char(36) not null,
+    author_user_id char(36) null,
+    body text not null,
+    created_at datetime not null,
+    updated_at datetime not null,
+    index idx_notes_case (case_id)
+  )`,
 ];
 
 async function run() {
@@ -173,6 +185,28 @@ async function run() {
 
   for (const statement of schemaStatements) {
     await connection.execute(statement);
+  }
+
+  const [existingColumns] = await connection.execute(
+    'select COLUMN_NAME from information_schema.columns where table_schema = ? and table_name = ?',
+    [database, 'suppliers'],
+  );
+  const columnRows = existingColumns as Array<{ COLUMN_NAME: string }>;
+  const columnSet = new Set(columnRows.map((row) => row.COLUMN_NAME));
+  if (!columnSet.has('phone_primary')) {
+    await connection.execute(
+      'alter table suppliers add column phone_primary varchar(64) null',
+    );
+  }
+  if (!columnSet.has('phone_secondary')) {
+    await connection.execute(
+      'alter table suppliers add column phone_secondary varchar(64) null',
+    );
+  }
+  if (!columnSet.has('location')) {
+    await connection.execute(
+      'alter table suppliers add column location varchar(255) null',
+    );
   }
 
   await connection.end();

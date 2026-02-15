@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import {
   createCase,
   createCaseItems,
+  createCaseEvent,
   createNotification,
   getNextPrNumber,
   listUsersByRole,
@@ -149,6 +150,12 @@ export async function prRoutes(app: FastifyInstance) {
         budgetEstimate: body.budget_estimate ?? 0,
         status: 'NEW',
         summaryForProcurement: body.summary_for_procurement ?? 'no summary provided',
+      });
+      await createCaseEvent({
+        caseId: created.id,
+        actorUserId: request.user?.id,
+        type: 'CREATED',
+        detailJson: JSON.stringify({ prNumber: created.prNumber }),
       });
 
       const [buyers, admins] = await Promise.all([
