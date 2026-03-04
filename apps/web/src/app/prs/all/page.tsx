@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { PageShell } from '../../../components/page-shell';
 import { Badge, Button, Card, CardContent, CardHeader, Table, TableCell, TableHead, TableHeader, TableRow } from '@procurement/ui';
 import { Filter } from 'lucide-react';
 import { apiFetch } from '../../../lib/api';
+import { getCaseStatusLabel } from '../../../lib/case-status';
 import type { PrRecord } from '../../../lib/types';
 
 type ApiCaseRecord = {
@@ -27,13 +28,27 @@ type ApiMe = {
   role: 'ADMIN' | 'BUYER';
 };
 
-export default function AllPrsPage() {
+function AllPrsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [buyerFilter, setBuyerFilter] = useState<string[]>([]);
   const [records, setRecords] = useState<PrRecord[]>([]);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const statusParam = searchParams.get('status');
+    if (!statusParam) {
+      return;
+    }
+    const next = statusParam
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    setStatusFilter(next);
+    setShowFilters(true);
+  }, [searchParams]);
 
   useEffect(() => {
     let active = true;
@@ -158,7 +173,7 @@ export default function AllPrsPage() {
                               : 'border-slate-200 text-slate-600 hover:border-slate-300'
                           }`}
                         >
-                          {status.replace(/_/g, ' ')}
+                          {getCaseStatusLabel(status)}
                         </button>
                       ))}
                     </div>
@@ -233,5 +248,13 @@ export default function AllPrsPage() {
         </Card>
       </div>
     </PageShell>
+  );
+}
+
+export default function AllPrsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <AllPrsPageContent />
+    </Suspense>
   );
 }

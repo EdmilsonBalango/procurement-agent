@@ -6,6 +6,7 @@ import { PageShell } from '../../../components/page-shell';
 import { Badge, Button, Card, CardContent, CardHeader, Table, TableCell, TableHead, TableHeader, TableRow } from '@procurement/ui';
 import { Filter } from 'lucide-react';
 import { apiFetch } from '../../../lib/api';
+import { getCaseStatusLabel } from '../../../lib/case-status';
 import type { PrRecord } from '../../../lib/types';
 
 type ApiCaseRecord = {
@@ -164,7 +165,7 @@ function InboxPageContent() {
                               : 'border-slate-200 text-slate-600 hover:border-slate-300'
                           }`}
                         >
-                          {status.replace(/_/g, ' ')}
+                          {getCaseStatusLabel(status)}
                         </button>
                       ))}
                     </div>

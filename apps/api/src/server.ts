@@ -16,6 +16,7 @@ import { fileRoutes } from './routes/files.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { prRoutes } from './routes/prs.js';
 import { userRoutes } from './routes/users.js';
+import { emailRoutes } from './routes/emails.js';
 import { initDb } from './lib/db.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
@@ -84,6 +85,7 @@ await app.register(fileRoutes);
 await app.register(webhookRoutes);
 await app.register(prRoutes);
 await app.register(userRoutes);
+await app.register(emailRoutes);
 
 const port = Number(process.env.PORT ?? 3001);
 

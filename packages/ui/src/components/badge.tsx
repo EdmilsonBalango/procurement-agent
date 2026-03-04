@@ -22,13 +22,14 @@ export const Badge = React.forwardRef<HTMLSpanElement, BadgeProps>(
     // If status-based coloring is requested
     if (variant !== 'default' && status) {
       const colors = getStatusColors(status, statusType || variant) ?? fallbackColors;
+      const statusLabel = status === 'IN_REVIEW' ? 'In review' : status;
       return (
         <span
           ref={ref}
           className={cn(baseClasses, colors.bg, colors.text, colors.border, className)}
           {...props}
         >
-          {children || status}
+          {children || statusLabel}
         </span>
       );
     }

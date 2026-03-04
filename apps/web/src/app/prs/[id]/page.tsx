@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { PageShell } from '../../../components/page-shell';
 import { DocumentVisualizer } from '../../../components/document-visualizer';
 import { FileDropzone } from '../../../components/file-dropzone';
@@ -30,6 +30,8 @@ import {
   VisuallyHidden,
 } from '@procurement/ui';
 import { apiBaseUrl, apiFetch } from '../../../lib/api';
+import { getCaseStatusLabel } from '../../../lib/case-status';
+import { useNotifications } from '../../providers';
 import type { PrRecord } from '../../../lib/types';
 
 type ApiCaseSummary = {
@@ -63,9 +65,12 @@ type ApiCaseDetail = ApiCaseSummary & {
   }>;
   files?: Array<{
     id: string;
+    type: string;
     filename: string;
     mimeType: string;
     storageKey: string;
+    uploadedBy: string;
+    createdAt: string;
   }>;
   notes?: Array<{
     id: string;
@@ -97,6 +102,16 @@ type ApiSupplier = {
   isActive: boolean;
 };
 
+type UploadedCaseFile = {
+  id: string;
+  type: string;
+  filename: string;
+  mimeType: string;
+  storageKey: string;
+  uploadedBy: string;
+  createdAt: string;
+};
+
 interface Document {
   name: string;
   type: string;
@@ -104,14 +119,26 @@ interface Document {
 }
 
 const PDF_MIME_TYPE = 'application/pdf';
+const DEFAULT_QUOTE_REQUEST_TEXT = 'Please provide your best quote for the items below.';
+const WORKSPACE_TABS = ['overview', 'quotes', 'notes', 'documents', 'audit', 'close'] as const;
+type WorkspaceTab = (typeof WORKSPACE_TABS)[number];
+
+const isWorkspaceTab = (value: string | null): value is WorkspaceTab =>
+  !!value && WORKSPACE_TABS.includes(value as WorkspaceTab);
 
 const isPdfFile = (file: File) =>
   file.type.toLowerCase() === PDF_MIME_TYPE || file.name.toLowerCase().endsWith('.pdf');
 
 export default function CaseWorkspacePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { pushToast } = useNotifications();
   const params = useParams<{ id: string }>();
   const prId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const requestedTab = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>(
+    isWorkspaceTab(requestedTab) ? requestedTab : 'overview',
+  );
   const [currentUser, setCurrentUser] = useState<{ id: string; role: string } | null>(null);
   const [pr, setPr] = useState<PrRecord>({
     id: prId,
@@ -135,7 +162,7 @@ export default function CaseWorkspacePage() {
   const [requestStep, setRequestStep] = useState(0);
   const [suppliers, setSuppliers] = useState<ApiSupplier[]>([]);
   const [selectedSupplierIds, setSelectedSupplierIds] = useState<Set<string>>(new Set());
-  const [emailBody, setEmailBody] = useState('Please provide your best quote.');
+  const [emailBody, setEmailBody] = useState(DEFAULT_QUOTE_REQUEST_TEXT);
   const [emailBodyTouched, setEmailBodyTouched] = useState(false);
   const [sendingRequest, setSendingRequest] = useState(false);
   const [quotes, setQuotes] = useState<
@@ -145,10 +172,20 @@ export default function CaseWorkspacePage() {
       amount: string;
       uploadedAt: string;
       fileId?: string | null;
+      documentName?: string;
+      deleteQuoteId?: string;
     }>
   >([]);
   const [caseFiles, setCaseFiles] = useState<
-    Array<{ id: string; filename: string; mimeType: string; storageKey: string }>
+    Array<{
+      id: string;
+      type: string;
+      filename: string;
+      mimeType: string;
+      storageKey: string;
+      uploadedBy: string;
+      createdAt: string;
+    }>
   >([]);
   const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
   const [quoteSupplierId, setQuoteSupplierId] = useState('');
@@ -161,6 +198,8 @@ export default function CaseWorkspacePage() {
   const [quoteFileError, setQuoteFileError] = useState<string | null>(null);
   const [uploadingQuoteFile, setUploadingQuoteFile] = useState(false);
   const [savingQuote, setSavingQuote] = useState(false);
+  const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
+  const [quoteToDelete, setQuoteToDelete] = useState<{ id: string; supplier: string } | null>(null);
   const [noteBody, setNoteBody] = useState('');
   const [notes, setNotes] = useState<
     Array<{ id: string; body: string; author: string; date: string }>
@@ -180,12 +219,27 @@ export default function CaseWorkspacePage() {
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [sendingReview, setSendingReview] = useState(false);
   const [confirmReviewOpen, setConfirmReviewOpen] = useState(false);
+  const [hasNewQuoteAfterReview, setHasNewQuoteAfterReview] = useState(false);
+  const [requestInvoiceDialogOpen, setRequestInvoiceDialogOpen] = useState(false);
+  const [requestingInvoice, setRequestingInvoice] = useState(false);
+  const [invoiceMessage, setInvoiceMessage] = useState('');
+  const [selectedInvoiceSupplierId, setSelectedInvoiceSupplierId] = useState('');
+  const [poFile, setPoFile] = useState<{ id: string; filename: string } | null>(null);
+  const [poFileError, setPoFileError] = useState<string | null>(null);
+  const [uploadingPoFile, setUploadingPoFile] = useState(false);
+  const [manualInvoiceDialogOpen, setManualInvoiceDialogOpen] = useState(false);
+  const [manualInvoiceFile, setManualInvoiceFile] = useState<{ id: string; filename: string } | null>(null);
+  const [manualInvoiceFileError, setManualInvoiceFileError] = useState<string | null>(null);
+  const [uploadingManualInvoice, setUploadingManualInvoice] = useState(false);
+  const [submittingManualInvoice, setSubmittingManualInvoice] = useState(false);
   const statusSteps: Array<{ label: string; status: PrRecord['status'] }> = [
     { label: 'New', status: 'NEW' },
     { label: 'Assigned', status: 'ASSIGNED' },
     { label: 'Waiting Quotes', status: 'WAITING_QUOTES' },
     { label: 'Ready for Review', status: 'READY_FOR_REVIEW' },
-    { label: 'Ready to Send', status: 'READY_TO_SEND' },
+    { label: 'In review', status: 'IN_REVIEW' },
+    { label: 'Request Invoice', status: 'REQUEST_INVOICE' },
+    { label: 'Waiting for Invoice', status: 'WAITING_INVOICE' },
     { label: 'Closed & Paid', status: 'CLOSED_PAID' },
   ];
   const statusIndexMap: Record<PrRecord['status'], number> = {
@@ -194,16 +248,51 @@ export default function CaseWorkspacePage() {
     ASSIGNED: 1,
     WAITING_QUOTES: 2,
     READY_FOR_REVIEW: 3,
-    READY_TO_SEND: 4,
-    SENT: 5,
-    CLOSED: 5,
-    CLOSED_PAID: 5,
+    IN_REVIEW: 4,
+    REQUEST_INVOICE: 5,
+    WAITING_INVOICE: 6,
+    SENT: 7,
+    CLOSED: 7,
+    CLOSED_PAID: 7,
   };
   const hasQuotes = quotes.length > 0;
-  const effectiveStatus: PrRecord['status'] = hasQuotes
-    ? 'READY_FOR_REVIEW'
-    : pr.status;
+  const effectiveStatus: PrRecord['status'] = [
+    'IN_REVIEW',
+    'REQUEST_INVOICE',
+    'WAITING_INVOICE',
+    'SENT',
+    'CLOSED',
+    'CLOSED_PAID',
+  ].includes(pr.status)
+    ? pr.status === 'IN_REVIEW' && requestInvoiceDialogOpen
+      ? 'REQUEST_INVOICE'
+      : pr.status
+    : hasQuotes
+      ? 'READY_FOR_REVIEW'
+      : pr.status;
+  const statusLabelMap: Record<PrRecord['status'], string> = {
+    NEW: 'New',
+    MISSING_INFO: 'Missing Info',
+    ASSIGNED: 'Assigned',
+    WAITING_QUOTES: 'Waiting Quotes',
+    READY_FOR_REVIEW: 'Ready for Review',
+    IN_REVIEW: 'In review',
+    REQUEST_INVOICE: 'Request Invoice',
+    WAITING_INVOICE: 'Waiting for Invoice',
+    SENT: 'Sent',
+    CLOSED: 'Closed',
+    CLOSED_PAID: 'Closed & Paid',
+  };
+  const effectiveStatusLabel = statusLabelMap[effectiveStatus] ?? effectiveStatus;
+
   const activeStepIndex = statusIndexMap[effectiveStatus] ?? 0;
+  const showSendForReviewButton = hasQuotes && (effectiveStatus !== 'IN_REVIEW' || hasNewQuoteAfterReview);
+
+  useEffect(() => {
+    if (isWorkspaceTab(requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+  }, [requestedTab]);
   const categorySet = new Set<string>();
   suppliers.forEach((supplier) => {
     const raw = supplier.categories;
@@ -220,34 +309,22 @@ export default function CaseWorkspacePage() {
   });
   const categoryTabs = ['All', ...Array.from(categorySet.values()).sort()];
 
-  const buildEmailBody = (record: PrRecord) => {
+  const buildEmailBody = (record: PrRecord, introText: string) => {
+    const escapedIntroText = introText
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;')
+      .replaceAll('\n', '<br/>');
     const rows = record.items
       .map(
         (item) =>
-          `<tr>
-            <td style="padding:6px 8px;border:1px solid #e2e8f0;">${item.details}</td>
-            <td style="padding:6px 8px;border:1px solid #e2e8f0;">${item.quantity}</td>
-            <td style="padding:6px 8px;border:1px solid #e2e8f0;">${item.unit}</td>
-            <td style="padding:6px 8px;border:1px solid #e2e8f0;">${item.preferredVendor}</td>
-          </tr>`,
+          `<tr><td style="padding:6px 8px;border:1px solid #e2e8f0;">${item.details}</td><td style="padding:6px 8px;border:1px solid #e2e8f0;">${item.quantity}</td><td style="padding:6px 8px;border:1px solid #e2e8f0;">${item.unit}</td></tr>`,
       )
       .join('');
 
-    return `
-<p>Please provide your best quote for the items below.</p>
-<table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;">
-  <thead>
-    <tr>
-      <th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;">Item</th>
-      <th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;">Qty</th>
-      <th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;">Unit</th>
-      <th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;">Preferred Vendor</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${rows || '<tr><td colspan="4" style="padding:6px 8px;border:1px solid #e2e8f0;">No items listed.</td></tr>'}
-  </tbody>
-</table>`;
+    return `<p>${escapedIntroText || DEFAULT_QUOTE_REQUEST_TEXT}</p><br/><table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:12px;"><thead><tr><th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;">Item</th><th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;">Qty</th><th style="text-align:left;padding:6px 8px;border:1px solid #e2e8f0;background:#f8fafc;">Unit</th></tr></thead><tbody>${rows || '<tr><td colspan="3" style="padding:6px 8px;border:1px solid #e2e8f0;">No items listed.</td></tr>'}</tbody></table><br/><p style="margin-top:12px;">Note: Please reply to this same email thread with your quotation and any relevant details.</p><br/><p>Kind regards,<br/>Karingani Procurement Team</p>`;
   };
 
   useEffect(() => {
@@ -350,6 +427,29 @@ export default function CaseWorkspacePage() {
           })),
         };
         setPr(mappedPr);
+        const supplierByFileId = new Map<string, string>();
+        (detail.events ?? [])
+          .filter((event) => event.type === 'QUOTE_RECEIVED')
+          .forEach((event) => {
+            try {
+              const parsed = JSON.parse(event.detailJson) as {
+                supplierName?: string;
+                supplierEmail?: string;
+                files?: Array<{ fileId?: string }>;
+              };
+              const supplierDisplay =
+                parsed.supplierName?.trim() || parsed.supplierEmail?.trim() || 'Unknown supplier';
+              (parsed.files ?? []).forEach((entry) => {
+                if (entry.fileId) {
+                  supplierByFileId.set(entry.fileId, supplierDisplay);
+                }
+              });
+            } catch {
+              // ignore malformed event payloads
+            }
+          });
+
+        const filesById = new Map((detail.files ?? []).map((file) => [file.id, file]));
         const mappedQuotes =
           detail.quotes?.map((quote) => ({
             id: quote.id,
@@ -365,8 +465,51 @@ export default function CaseWorkspacePage() {
                 })
               : '—',
             fileId: quote.fileId ?? null,
+            documentName: quote.fileId ? filesById.get(quote.fileId)?.filename : undefined,
+            deleteQuoteId: quote.id,
           })) ?? [];
-        setQuotes(mappedQuotes);
+        const linkedFileIds = new Set(
+          mappedQuotes
+            .map((quote) => quote.fileId)
+            .filter((fileId): fileId is string => Boolean(fileId)),
+        );
+        const receivedUploads = (detail.files ?? [])
+          .filter((file) => file.type === 'QUOTE_ATTACHMENT' && !linkedFileIds.has(file.id))
+          .map((file) => ({
+            id: `file-${file.id}`,
+            supplier: supplierByFileId.get(file.id) ?? 'Unknown supplier',
+            amount: '—',
+            uploadedAt: file.createdAt
+              ? new Date(file.createdAt).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                })
+              : '—',
+            fileId: file.id,
+            documentName: file.filename,
+          }));
+        setQuotes([...mappedQuotes, ...receivedUploads]);
+        if (detail.status === 'IN_REVIEW') {
+          const lastInReviewAt = (detail.events ?? [])
+            .filter((event) => event.type === 'STATUS_CHANGE')
+            .map((event) => {
+              try {
+                const parsed = JSON.parse(event.detailJson) as { to?: string };
+                return parsed.to === 'IN_REVIEW' ? new Date(event.createdAt).getTime() : null;
+              } catch {
+                return null;
+              }
+            })
+            .filter((value): value is number => value !== null)
+            .sort((a, b) => b - a)[0];
+          const hasQuoteAfterReview =
+            typeof lastInReviewAt === 'number'
+              ? (detail.quotes ?? []).some((quote) => new Date(quote.receivedAt).getTime() > lastInReviewAt)
+              : false;
+          setHasNewQuoteAfterReview(hasQuoteAfterReview);
+        } else {
+          setHasNewQuoteAfterReview(false);
+        }
         setCaseFiles(detail.files ?? []);
         const mappedNotes =
           detail.notes?.map((note) => ({
@@ -384,7 +527,9 @@ export default function CaseWorkspacePage() {
           try {
             const parsed = JSON.parse(event.detailJson) as Record<string, string>;
             if (event.type === 'STATUS_CHANGE') {
-              action = `Status changed from ${parsed.from ?? ''} to ${parsed.to ?? ''}`.trim();
+              const from = parsed.from ? getCaseStatusLabel(parsed.from) : '';
+              const to = parsed.to ? getCaseStatusLabel(parsed.to) : '';
+              action = `Status changed from ${from} to ${to}`.trim();
             }
           } catch {
             // ignore
@@ -400,7 +545,7 @@ export default function CaseWorkspacePage() {
           } as const;
         });
         setAuditEvents(mappedEvents);
-        setEmailBody((current) => (emailBodyTouched ? current : buildEmailBody(mappedPr)));
+        setEmailBody((current) => (emailBodyTouched ? current : DEFAULT_QUOTE_REQUEST_TEXT));
       } catch {
         // ignore
       }
@@ -457,7 +602,7 @@ export default function CaseWorkspacePage() {
   const resetRequestDialog = () => {
     setRequestStep(0);
     setSelectedSupplierIds(new Set());
-    setEmailBody(buildEmailBody(pr));
+    setEmailBody(DEFAULT_QUOTE_REQUEST_TEXT);
     setEmailBodyTouched(false);
     setSendingRequest(false);
   };
@@ -472,13 +617,22 @@ export default function CaseWorkspacePage() {
         method: 'POST',
         body: JSON.stringify({
           supplierIds: Array.from(selectedSupplierIds),
-          messageTemplate: emailBody,
+          messageTemplate: buildEmailBody(pr, emailBody),
         }),
+      });
+      pushToast({
+        title: 'Message sent',
+        message: 'Quote request sent successfully.',
+        tone: 'success',
       });
       setRequestDialogOpen(false);
       resetRequestDialog();
     } catch {
-      // ignore
+      pushToast({
+        title: 'Failed to send message',
+        message: 'Failed to send quote request.',
+        tone: 'error',
+      });
     } finally {
       setSendingRequest(false);
     }
@@ -532,6 +686,24 @@ export default function CaseWorkspacePage() {
     setVisualizerOpen(true);
   };
 
+  const uploadCasePdf = async (file: File, type: string): Promise<UploadedCaseFile> => {
+    if (!caseId) {
+      throw new Error('Case not loaded');
+    }
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('type', type);
+    const response = await fetch(`${apiBaseUrl}/cases/${caseId}/files`, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error('Upload failed');
+    }
+    return response.json() as Promise<UploadedCaseFile>;
+  };
+
   const uploadQuoteAttachment = async (file: File) => {
     if (!caseId || uploadingQuoteFile) {
       return;
@@ -543,30 +715,18 @@ export default function CaseWorkspacePage() {
     setQuoteFileError(null);
     setUploadingQuoteFile(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const response = await fetch(`${apiBaseUrl}/cases/${caseId}/files`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-      if (!response.ok) {
-        throw new Error('Upload failed');
-      }
-      const uploaded = (await response.json()) as {
-        id: string;
-        filename: string;
-        mimeType: string;
-        storageKey: string;
-      };
+      const uploaded = await uploadCasePdf(file, 'QUOTE_ATTACHMENT');
       
       setQuoteFile({ id: uploaded.id, filename: uploaded.filename });
       setCaseFiles((prev) => [
         {
           id: uploaded.id,
+          type: uploaded.type,
           filename: uploaded.filename,
           mimeType: uploaded.mimeType,
           storageKey: uploaded.storageKey,
+          uploadedBy: uploaded.uploadedBy,
+          createdAt: uploaded.createdAt,
         },
         ...prev,
       ]);
@@ -574,6 +734,48 @@ export default function CaseWorkspacePage() {
       setQuoteFileError('Failed to upload PDF document.');
     } finally {
       setUploadingQuoteFile(false);
+    }
+  };
+
+  const uploadPoAttachment = async (file: File) => {
+    if (!caseId || uploadingPoFile) {
+      return;
+    }
+    if (!isPdfFile(file)) {
+      setPoFileError('Only PDF documents can be uploaded.');
+      return;
+    }
+    setPoFileError(null);
+    setUploadingPoFile(true);
+    try {
+      const uploaded = await uploadCasePdf(file, 'PO_ATTACHMENT');
+      setPoFile({ id: uploaded.id, filename: uploaded.filename });
+      setCaseFiles((prev) => [uploaded, ...prev]);
+    } catch {
+      setPoFileError('Failed to upload PO document.');
+    } finally {
+      setUploadingPoFile(false);
+    }
+  };
+
+  const uploadManualInvoiceAttachment = async (file: File) => {
+    if (!caseId || uploadingManualInvoice) {
+      return;
+    }
+    if (!isPdfFile(file)) {
+      setManualInvoiceFileError('Only PDF documents can be uploaded.');
+      return;
+    }
+    setManualInvoiceFileError(null);
+    setUploadingManualInvoice(true);
+    try {
+      const uploaded = await uploadCasePdf(file, 'SUPPLIER_INVOICE');
+      setManualInvoiceFile({ id: uploaded.id, filename: uploaded.filename });
+      setCaseFiles((prev) => [uploaded, ...prev]);
+    } catch {
+      setManualInvoiceFileError('Failed to upload invoice document.');
+    } finally {
+      setUploadingManualInvoice(false);
     }
   };
 
@@ -613,6 +815,8 @@ export default function CaseWorkspacePage() {
             day: 'numeric',
           }),
           fileId: quoteFile?.id ?? null,
+          documentName: quoteFile?.filename,
+          deleteQuoteId: created.id,
         },
         ...prev,
       ]);
@@ -621,10 +825,31 @@ export default function CaseWorkspacePage() {
       setQuoteAmount('');
       setQuoteCurrency('USD');
       setQuoteFile(null);
+      if (pr.status === 'IN_REVIEW') {
+        setHasNewQuoteAfterReview(true);
+      }
     } catch {
       // ignore
     } finally {
       setSavingQuote(false);
+    }
+  };
+
+  const deleteQuote = async (quoteId: string) => {
+    if (!caseId || deletingQuoteId) {
+      return;
+    }
+    setDeletingQuoteId(quoteId);
+    try {
+      await apiFetch<void>(`/cases/${caseId}/quotes/${quoteId}`, {
+        method: 'DELETE',
+      });
+      setQuotes((prev) => prev.filter((quote) => quote.id !== quoteId));
+      setQuoteToDelete(null);
+    } catch {
+      // ignore
+    } finally {
+      setDeletingQuoteId(null);
     }
   };
 
@@ -636,11 +861,34 @@ export default function CaseWorkspacePage() {
     try {
       await apiFetch(`/cases/${caseId}`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'READY_FOR_REVIEW' }),
+        body: JSON.stringify({ status: 'IN_REVIEW' }),
       });
-      setPr((prev) => ({ ...prev, status: 'READY_FOR_REVIEW' }));
-    } catch {
-      // ignore
+      pushToast({
+        title: 'Message sent',
+        message: 'Review notification sent successfully.',
+        tone: 'success',
+      });
+      setPr((prev) => ({ ...prev, status: 'IN_REVIEW' }));
+      setHasNewQuoteAfterReview(false);
+    } catch (error) {
+      const rawMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Failed to communicate with the review webhook.';
+      let message = rawMessage;
+      try {
+        const parsed = JSON.parse(rawMessage) as { message?: string };
+        if (parsed.message) {
+          message = parsed.message;
+        }
+      } catch {
+        // keep raw message
+      }
+      pushToast({
+        title: 'Failed to send for review',
+        message,
+        tone: 'error',
+      });
     } finally {
       setSendingReview(false);
     }
@@ -654,6 +902,73 @@ export default function CaseWorkspacePage() {
     void sendReview();
   };
 
+  const requestInvoice = async () => {
+    if (!caseId || requestingInvoice || !poFile || !selectedInvoiceSupplierId) {
+      return;
+    }
+    setRequestingInvoice(true);
+    try {
+      await apiFetch(`/cases/${caseId}/request-invoice`, {
+        method: 'POST',
+        body: JSON.stringify({
+          poFileId: poFile.id,
+          supplierId: selectedInvoiceSupplierId || undefined,
+          messageTemplate: invoiceMessage.trim() || undefined,
+        }),
+      });
+      setPr((prev) => ({ ...prev, status: 'WAITING_INVOICE' }));
+      setRequestInvoiceDialogOpen(false);
+      setInvoiceMessage('');
+      pushToast({
+        title: 'Invoice requested',
+        message: 'PO uploaded and invoice request sent to supplier.',
+        tone: 'success',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to request invoice.';
+      pushToast({
+        title: 'Failed to request invoice',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setRequestingInvoice(false);
+    }
+  };
+
+  const submitManualInvoice = async () => {
+    if (!caseId || !manualInvoiceFile || submittingManualInvoice) {
+      return;
+    }
+    setSubmittingManualInvoice(true);
+    try {
+      await apiFetch(`/cases/${caseId}/supplier-invoice/manual`, {
+        method: 'POST',
+        body: JSON.stringify({
+          fileId: manualInvoiceFile.id,
+          supplierId: selectedInvoiceSupplierId || undefined,
+        }),
+      });
+      setManualInvoiceDialogOpen(false);
+      setManualInvoiceFile(null);
+      setPr((prev) => ({ ...prev, status: 'WAITING_INVOICE' }));
+      pushToast({
+        title: 'Invoice received',
+        message: 'Supplier invoice was uploaded successfully.',
+        tone: 'success',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save supplier invoice.';
+      pushToast({
+        title: 'Failed to save invoice',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setSubmittingManualInvoice(false);
+    }
+  };
+
   return (
     <PageShell>
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -664,7 +979,7 @@ export default function CaseWorkspacePage() {
             </div>
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-semibold text-heading">{pr.id}</h2>
-              <Badge variant="case" status={effectiveStatus} />
+              <Badge variant="case" status={effectiveStatus}>{effectiveStatusLabel}</Badge>
             </div>
             <p className="mt-2 text-sm text-muted">
               {pr.summary} • assigned to {pr.buyer} • Needed by {pr.neededBy}.
@@ -730,45 +1045,7 @@ export default function CaseWorkspacePage() {
                 </div>
               </DialogContent>
             </Dialog>
-            {hasQuotes ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={handleSendReviewClick}
-                  disabled={sendingReview}
-                >
-                  {sendingReview ? 'Sending...' : 'Send for review'}
-                </Button>
-                <Dialog open={confirmReviewOpen} onOpenChange={setConfirmReviewOpen}>
-                  <DialogContent className="motion-modal">
-                    <DialogTitle>
-                      <VisuallyHidden>Confirm sending for review</VisuallyHidden>
-                    </DialogTitle>
-                    <h3 className="text-lg font-semibold text-heading">Send for review?</h3>
-                    <p className="mt-2 text-sm text-muted">
-                      This PR has {quotes.length} quote{quotes.length === 1 ? '' : 's'}. Are you
-                      sure you want to send it for review now?
-                    </p>
-                    <div className="mt-6 flex gap-3">
-                      <Button
-                        full
-                        onClick={() => {
-                          setConfirmReviewOpen(false);
-                          void sendReview();
-                        }}
-                        disabled={sendingReview}
-                      >
-                        {sendingReview ? 'Sending...' : 'Send anyway'}
-                      </Button>
-                      <DialogClose asChild>
-                        <Button full variant="secondary">Cancel</Button>
-                      </DialogClose>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </>
-            ) : null}
+            
             {pr.buyer !== 'Unassigned' ? (
               <Dialog
                 open={requestDialogOpen}
@@ -780,7 +1057,12 @@ export default function CaseWorkspacePage() {
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button size="sm">Request quotes</Button>
+                  <Button
+                    size="sm"
+                    variant={effectiveStatus === 'READY_FOR_REVIEW' ? 'secondary' : 'primary'}
+                  >
+                    Request quotes
+                  </Button>
                 </DialogTrigger>
                 <DialogContent className="motion-modal w-full max-w-3xl">
                   <DialogTitle>
@@ -892,7 +1174,10 @@ export default function CaseWorkspacePage() {
                           Suppliers selected: <strong>{selectedSupplierIds.size}</strong>
                         </p>
                         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-                          {emailBody}
+                          <div
+                            className="text-slate-700 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-slate-200 [&_td]:p-2 [&_th]:border [&_th]:border-slate-200 [&_th]:bg-slate-100 [&_th]:p-2 [&_th]:text-left"
+                            dangerouslySetInnerHTML={{ __html: buildEmailBody(pr, emailBody) }}
+                          />
                         </div>
                       </CardContent>
                     </Card>
@@ -932,10 +1217,185 @@ export default function CaseWorkspacePage() {
                 </DialogContent>
               </Dialog>
             ) : null}
+            {showSendForReviewButton ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={handleSendReviewClick}
+                  disabled={sendingReview}
+                >
+                  {sendingReview ? 'Sending...' : 'Send for review'}
+                </Button>
+                <Dialog open={confirmReviewOpen} onOpenChange={setConfirmReviewOpen}>
+                  <DialogContent className="motion-modal">
+                    <DialogTitle>
+                      <VisuallyHidden>Confirm sending for review</VisuallyHidden>
+                    </DialogTitle>
+                    <h3 className="text-lg font-semibold text-heading">Send for review?</h3>
+                    <p className="mt-2 text-sm text-muted">
+                      This PR has {quotes.length} quote{quotes.length === 1 ? '' : 's'}. Are you
+                      sure you want to send it for review now?
+                    </p>
+                    <div className="mt-6 flex gap-3">
+                      <Button
+                        full
+                        onClick={() => {
+                          setConfirmReviewOpen(false);
+                          void sendReview();
+                        }}
+                        disabled={sendingReview}
+                      >
+                        {sendingReview ? 'Sending...' : 'Send anyway'}
+                      </Button>
+                      <DialogClose asChild>
+                        <Button full variant="secondary">Cancel</Button>
+                      </DialogClose>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </>
+            ) : null}
+            {effectiveStatus === 'IN_REVIEW' || effectiveStatus === 'REQUEST_INVOICE' ? (
+              <Dialog
+                open={requestInvoiceDialogOpen}
+                onOpenChange={(open) => {
+                  setRequestInvoiceDialogOpen(open);
+                  if (!open) {
+                    setPoFileError(null);
+                    setSelectedInvoiceSupplierId('');
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="primary">Request invoice</Button>
+                </DialogTrigger>
+                <DialogContent className="motion-modal w-full max-w-2xl">
+                  <DialogTitle>
+                    <VisuallyHidden>Request supplier invoice</VisuallyHidden>
+                  </DialogTitle>
+                  <h3 className="text-lg font-semibold text-heading">Request Invoice</h3>
+                  <p className="mt-2 text-sm text-muted">
+                    Upload the PO and send the invoice request to the supplier.
+                  </p>
+                  <div className="mt-4 space-y-4">
+                    <FileDropzone
+                      label="Drag and drop PO PDF here, or click to upload"
+                      onFileSelected={uploadPoAttachment}
+                      disabled={uploadingPoFile || requestingInvoice}
+                      accept="application/pdf,.pdf"
+                    />
+                    {poFile ? (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                        Uploaded PO: {poFile.filename}
+                      </div>
+                    ) : uploadingPoFile ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                        Uploading PO...
+                      </div>
+                    ) : null}
+                    {poFileError ? (
+                      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                        {poFileError}
+                      </div>
+                    ) : null}
+                    <Select
+                      label="Supplier"
+                      value={selectedInvoiceSupplierId}
+                      onChange={(event) => setSelectedInvoiceSupplierId(event.target.value)}
+                      options={[
+                        { value: '', label: 'Select supplier' },
+                        ...suppliers.map((supplier) => ({
+                          value: supplier.id,
+                          label: supplier.name,
+                        })),
+                      ]}
+                    />
+                    <label className="block text-sm font-medium text-slate-700">
+                      Message (optional)
+                      <textarea
+                        value={invoiceMessage}
+                        onChange={(event) => setInvoiceMessage(event.target.value)}
+                        rows={4}
+                        className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                        placeholder="Please send your invoice and tax details."
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-6 flex gap-3">
+                    <Button
+                      full
+                      onClick={requestInvoice}
+                      disabled={!poFile || !selectedInvoiceSupplierId || requestingInvoice}
+                    >
+                      {requestingInvoice ? 'Sending...' : 'Send request'}
+                    </Button>
+                    <DialogClose asChild>
+                      <Button full variant="secondary">Cancel</Button>
+                    </DialogClose>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            ) : null}
+            {effectiveStatus === 'WAITING_INVOICE' ? (
+              <Dialog
+                open={manualInvoiceDialogOpen}
+                onOpenChange={(open) => {
+                  setManualInvoiceDialogOpen(open);
+                  if (!open) {
+                    setManualInvoiceFileError(null);
+                    setManualInvoiceFile(null);
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
+                  <Button size="sm" variant="secondary">Upload invoice</Button>
+                </DialogTrigger>
+                <DialogContent className="motion-modal w-full max-w-xl">
+                  <DialogTitle>
+                    <VisuallyHidden>Upload supplier invoice</VisuallyHidden>
+                  </DialogTitle>
+                  <h3 className="text-lg font-semibold text-heading">Waiting for Invoice</h3>
+                  <p className="mt-2 text-sm text-muted">
+                    Upload invoice manually if it was received outside the supplier webhook.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    <FileDropzone
+                      label="Drag and drop supplier invoice PDF here"
+                      onFileSelected={uploadManualInvoiceAttachment}
+                      disabled={uploadingManualInvoice || submittingManualInvoice}
+                      accept="application/pdf,.pdf"
+                    />
+                    {manualInvoiceFile ? (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                        Uploaded invoice: {manualInvoiceFile.filename}
+                      </div>
+                    ) : uploadingManualInvoice ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                        Uploading invoice...
+                      </div>
+                    ) : null}
+                    {manualInvoiceFileError ? (
+                      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                        {manualInvoiceFileError}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-6 flex gap-3">
+                    <Button full onClick={submitManualInvoice} disabled={!manualInvoiceFile || submittingManualInvoice}>
+                      {submittingManualInvoice ? 'Saving...' : 'Confirm invoice received'}
+                    </Button>
+                    <DialogClose asChild>
+                      <Button full variant="secondary">Cancel</Button>
+                    </DialogClose>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            ) : null}
           </div>
         </div>
 
-        <Tabs defaultValue="overview">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)}>
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             {/* <TabsTrigger value="checklist">Checklist</TabsTrigger> */}
@@ -1165,9 +1625,11 @@ export default function CaseWorkspacePage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Supplier</TableHead>
+                      <TableHead>Received from</TableHead>
                       <TableHead>Amount</TableHead>
                       <TableHead>Uploaded date</TableHead>
+                      <TableHead>Document</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <tbody>
@@ -1180,10 +1642,83 @@ export default function CaseWorkspacePage() {
                         <TableCell>{row.supplier}</TableCell>
                         <TableCell>{row.amount}</TableCell>
                         <TableCell>{row.uploadedAt}</TableCell>
+                        <TableCell>
+                          {row.fileId ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openQuoteDocument(row.fileId);
+                              }}
+                            >
+                              {row.documentName ?? 'View document'}
+                            </Button>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {row.deleteQuoteId ? (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (!row.deleteQuoteId) {
+                                  return;
+                                }
+                                setQuoteToDelete({ id: row.deleteQuoteId, supplier: row.supplier });
+                              }}
+                              disabled={deletingQuoteId === row.deleteQuoteId}
+                            >
+                              {deletingQuoteId === row.deleteQuoteId ? 'Deleting...' : 'Delete'}
+                            </Button>
+                          ) : (
+                            '—'
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </tbody>
                 </Table>
+                <Dialog
+                  open={Boolean(quoteToDelete)}
+                  onOpenChange={(open) => {
+                    if (!open && !deletingQuoteId) {
+                      setQuoteToDelete(null);
+                    }
+                  }}
+                >
+                  <DialogContent className="motion-modal">
+                    <DialogTitle>
+                      <VisuallyHidden>Confirm quote deletion</VisuallyHidden>
+                    </DialogTitle>
+                    <h3 className="text-lg font-semibold text-heading">Delete quote file?</h3>
+                    <p className="mt-2 text-sm text-muted">
+                      This will remove the quote from <strong>{quoteToDelete?.supplier ?? 'supplier'}</strong>.
+                      This action cannot be undone.
+                    </p>
+                    <div className="mt-6 flex gap-3">
+                      <Button
+                        full
+                        onClick={() => {
+                          if (quoteToDelete) {
+                            void deleteQuote(quoteToDelete.id);
+                          }
+                        }}
+                        disabled={!quoteToDelete || Boolean(deletingQuoteId)}
+                      >
+                        {deletingQuoteId ? 'Deleting...' : 'Delete'}
+                      </Button>
+                      <DialogClose asChild>
+                        <Button full variant="secondary" disabled={Boolean(deletingQuoteId)}>
+                          Cancel
+                        </Button>
+                      </DialogClose>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
           </TabsContent>

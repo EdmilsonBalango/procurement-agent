@@ -9,7 +9,9 @@ export const caseStatusValues = [
   'ASSIGNED',
   'WAITING_QUOTES',
   'READY_FOR_REVIEW',
-  'READY_TO_SEND',
+  'IN_REVIEW',
+  'REQUEST_INVOICE',
+  'WAITING_INVOICE',
   'SENT',
   'CLOSED',
 ] as const;
@@ -35,6 +37,7 @@ export const mfaVerifySchema = z.object({
 
 export const createCaseSchema = z.object({
   prNumber: z.string().min(3),
+  messageId: z.string().min(1),
   subject: z.string().min(3),
   requesterName: z.string().min(2),
   requesterEmail: z.string().email(),

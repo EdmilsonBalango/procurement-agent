@@ -16,6 +16,7 @@ export async function prRoutes(app: FastifyInstance) {
         body: {
           type: 'object',
           required: [
+            'email_details',
             'is_purchase_request',
             'confidence_score',
             'subject',
@@ -32,6 +33,13 @@ export async function prRoutes(app: FastifyInstance) {
             'summary_for_procurement',
           ],
           properties: {
+            email_details: {
+              type: 'object',
+              required: ['messageID'],
+              properties: {
+                messageID: { type: ['string', 'null'], minLength: 1 },
+              },
+            },
             is_purchase_request: { type: 'boolean' },
             confidence_score: { type: 'number', minimum: 0, maximum: 1 },
             subject: { type: ['string', 'null'] },
@@ -97,6 +105,9 @@ export async function prRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const body = request.body as {
+        email_details: {
+          messageID: string | null;
+        };
         is_purchase_request: boolean;
         confidence_score: number;
         subject: string | null;
@@ -139,6 +150,7 @@ export async function prRoutes(app: FastifyInstance) {
 
       const created = await createCase({
         prNumber: await getNextPrNumber(),
+        messageId: body.email_details.messageID ?? 'undefined',
         subject: body.subject ?? 'No Subject',
         requesterName: body.requester.name ?? 'Unknown',
         requesterEmail: body.requester.email ?? 'unknown@local',

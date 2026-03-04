@@ -48,6 +48,7 @@ export type Supplier = {
 export type CaseRecord = {
   id: string;
   prNumber: string;
+  messageId: string;
   subject: string;
   requesterName: string;
   requesterEmail: string;
@@ -158,7 +159,9 @@ const statuses = [
   'ASSIGNED',
   'WAITING_QUOTES',
   'READY_FOR_REVIEW',
-  'READY_TO_SEND',
+  'IN_REVIEW',
+  'REQUEST_INVOICE',
+  'WAITING_INVOICE',
   'SENT',
   'CLOSED',
   'MISSING_INFO',
@@ -171,7 +174,7 @@ const userSelect =
 const supplierSelect =
   'select id, name, email, categories, is_active as isActive, phone_primary as phonePrimary, phone_secondary as phoneSecondary, location, created_at as createdAt from suppliers';
 const caseSelect =
-  'select id, pr_number as prNumber, subject, requester_name as requesterName, requester_email as requesterEmail, department, priority, needed_by as neededBy, cost_center as costCenter, delivery_location as deliveryLocation, budget_estimate as budgetEstimate, status, assigned_buyer_id as assignedBuyerId, exception_approved_by_id as exceptionApprovedById, exception_approved_at as exceptionApprovedAt, exception_reason as exceptionReason, created_at as createdAt, updated_at as updatedAt, summary_for_procurement as summaryForProcurement from cases';
+  'select id, pr_number as prNumber, message_id as messageId, subject, requester_name as requesterName, requester_email as requesterEmail, department, priority, needed_by as neededBy, cost_center as costCenter, delivery_location as deliveryLocation, budget_estimate as budgetEstimate, status, assigned_buyer_id as assignedBuyerId, exception_approved_by_id as exceptionApprovedById, exception_approved_at as exceptionApprovedAt, exception_reason as exceptionReason, created_at as createdAt, updated_at as updatedAt, summary_for_procurement as summaryForProcurement from cases';
 const caseItemSelect =
   'select id, case_id as caseId, description, qty, uom, specs from case_items';
 const checklistSelect =
@@ -290,10 +293,11 @@ async function ensureSeedData() {
       const updatedAt = now();
 
       await conn.execute(
-        'insert into cases (id, pr_number, subject, requester_name, requester_email, department, priority, needed_by, cost_center, delivery_location, budget_estimate, status, assigned_buyer_id, created_at, updated_at, summary_for_procurement) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'insert into cases (id, pr_number, message_id, subject, requester_name, requester_email, department, priority, needed_by, cost_center, delivery_location, budget_estimate, status, assigned_buyer_id, created_at, updated_at, summary_for_procurement) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           caseId,
           `PR-2024-${1000 + i}`,
+          `seed-message-${1000 + i}`,
           `Procurement request ${i + 1}`,
           `Requester ${i + 1}`,
           `requester${i + 1}@example.com`,
@@ -680,18 +684,25 @@ export async function getCaseById(id: string) {
   return rows[0] ?? null;
 }
 
+export async function getCaseByPrNumber(prNumber: string) {
+  const rows = await query<CaseRecord>(`${caseSelect} where pr_number = ? limit 1`, [prNumber]);
+  return rows[0] ?? null;
+}
+
 export async function createCase(data: Omit<CaseRecord, 'id' | 'createdAt' | 'updatedAt'>) {
   const record: CaseRecord = {
     id: randomUUID(),
     createdAt: now(),
     updatedAt: now(),
     ...data,
+    messageId: data.messageId ?? randomUUID(),
   };
   await execute(
-    'insert into cases (id, pr_number, subject, requester_name, requester_email, department, priority, needed_by, cost_center, delivery_location, budget_estimate, status, assigned_buyer_id, exception_approved_by_id, exception_approved_at, exception_reason, created_at, updated_at, summary_for_procurement) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'insert into cases (id, pr_number, message_id, subject, requester_name, requester_email, department, priority, needed_by, cost_center, delivery_location, budget_estimate, status, assigned_buyer_id, exception_approved_by_id, exception_approved_at, exception_reason, created_at, updated_at, summary_for_procurement) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       record.id,
       record.prNumber,
+      record.messageId,
       record.subject,
       record.requesterName,
       record.requesterEmail,
@@ -735,6 +746,10 @@ export async function updateCase(id: string, data: Partial<CaseRecord>) {
   if (data.subject !== undefined) {
     fields.push('subject = ?');
     params.push(data.subject);
+  }
+  if (data.messageId !== undefined) {
+    fields.push('message_id = ?');
+    params.push(data.messageId);
   }
   if (data.requesterName !== undefined) {
     fields.push('requester_name = ?');
@@ -880,6 +895,11 @@ export async function createQuote(data: Omit<Quote, 'id' | 'receivedAt'>) {
     ],
   );
   return quote;
+}
+
+export async function deleteQuote(caseId: string, quoteId: string) {
+  await execute('delete from quotes where id = ? and case_id = ?', [quoteId, caseId]);
+  return true;
 }
 
 export async function listFilesByCase(caseId: string) {
@@ -1035,6 +1055,11 @@ export async function createNote(data: Omit<Note, 'id' | 'createdAt' | 'updatedA
 
 export async function getSupplierById(id: string) {
   const rows = await query<Supplier>(`${supplierSelect} where id = ? limit 1`, [id]);
+  return rows[0] ?? null;
+}
+
+export async function getSupplierByEmail(email: string) {
+  const rows = await query<Supplier>(`${supplierSelect} where lower(email) = lower(?) limit 1`, [email]);
   return rows[0] ?? null;
 }
 

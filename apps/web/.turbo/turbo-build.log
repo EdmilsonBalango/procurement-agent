@@ -7,4 +7,29 @@
 
 [33m[1m⚠[22m[39m The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
 [37m[1m [22m[39m Creating an optimized production build ...
-[41m[30m ELIFECYCLE [39m[49m [31mCommand failed with exit code 130.[39m
+[32m[1m✓[22m[39m Compiled successfully in 1845.9ms
+[?25l[37m[1m [22m[39m Running TypeScript  [36m.[39m[2K[1G[37m[1m [22m[39m Running TypeScript  [36m..[39m[2K[1G[37m[1m [22m[39m Running TypeScript  [36m...[39m[2K[1G[37m[1m [22m[39m Running TypeScript  [36m.[39m[2K[1G[37m[1m [22m[39m Running TypeScript  [36m..[39m[2K[1G[37m[1m [22m[39m Running TypeScript  [36m...[39m[2K[1G[37m[1m [22m[39m Running TypeScript  [36m.[39m[2K[1G[37m[1m [22m[39m Running TypeScript  [36m..[39m[2K[1G[37m[1m [22m[39m Running TypeScript  [36m...[39m[2K[1G[?25h[?25l[37m[1m [22m[39m Finished TypeScript in 1781.3ms  [36m.[39m[2K[1G[?25h[37m[1m [22m[39m Finished TypeScript in 1781.3ms    [32m[1m✓[22m[39m Finished TypeScript in 1781.3ms 
+[?25l[37m[1m [22m[39m Collecting page data using 7 workers  [36m.[39m[2K[1G[37m[1m [22m[39m Collecting page data using 7 workers  [36m..[39m[2K[1G[?25h[37m[1m [22m[39m Collecting page data using 7 workers in 254.5ms    [32m[1m✓[22m[39m Collecting page data using 7 workers in 254.5ms 
+[?25l[37m[1m [22m[39m Generating static pages using 7 workers (0/11)  [36m[    ][39m[2K[1G[?25h[32m[1m✓[22m[39m Generating static pages using 7 workers (11/11) in 105.1ms
+[?25l[37m[1m [22m[39m Finalizing page optimization  [36m.[39m[2K[1G[?25h[37m[1m [22m[39m Finalizing page optimization in 9.1ms    [32m[1m✓[22m[39m Finalizing page optimization in 9.1ms 
+
+[4mRoute (app)[24m
+┌ ○ /
+├ ○ /_not-found
+├ ○ /dashboard
+├ ○ /login
+├ ○ /mfa
+├ ○ /notifications
+├ ƒ /prs/[id]
+├ ○ /prs/all
+├ ○ /prs/inbox
+├ ○ /settings
+└ ○ /suppliers
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+[?25h

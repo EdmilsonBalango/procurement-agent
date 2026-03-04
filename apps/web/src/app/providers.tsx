@@ -2,7 +2,7 @@
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import React, { ReactNode, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { apiBaseUrl, queryClient } from '../lib/api';
+import { apiBaseUrl, apiFetch, queryClient } from '../lib/api';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -25,7 +25,9 @@ type Toast = {
   id: string;
   title: string;
   message?: string;
-  tone?: 'info' | 'success' | 'warning';
+  tone?: 'info' | 'success' | 'warning' | 'error';
+  actionLabel?: string;
+  actionHref?: string;
 };
 
 type ApiNotification = {
@@ -37,6 +39,10 @@ type ApiNotification = {
   createdAt: string;
   caseId?: string | null;
   type: string;
+};
+
+type ApiCaseDetail = {
+  prNumber: string;
 };
 
 type NotificationContextValue = {
@@ -130,6 +136,8 @@ const NotificationProvider = ({ children }: { children: ReactNode }) => {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timeouts = useRef<Map<string, number>>(new Map());
   const seenNotifications = useRef<Set<string>>(new Set());
+  const casePrNumbers = useRef<Map<string, string>>(new Map());
+  const prFetchByCaseId = useRef<Map<string, Promise<string | null>>>(new Map());
   const initialized = useRef(false);
   const reconnectTimer = useRef<number | null>(null);
   const sourceRef = useRef<EventSource | null>(null);
@@ -172,6 +180,37 @@ const NotificationProvider = ({ children }: { children: ReactNode }) => {
     });
   };
 
+  const getPrNumberForCaseId = async (caseId: string | null | undefined): Promise<string | null> => {
+    if (!caseId) {
+      return null;
+    }
+    const cached = casePrNumbers.current.get(caseId);
+    if (cached) {
+      return cached;
+    }
+    const existingRequest = prFetchByCaseId.current.get(caseId);
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const request = apiFetch<ApiCaseDetail>(`/cases/${caseId}`)
+      .then((caseRecord) => {
+        const prNumber = caseRecord.prNumber?.trim();
+        if (prNumber) {
+          casePrNumbers.current.set(caseId, prNumber);
+          return prNumber;
+        }
+        return null;
+      })
+      .catch(() => null)
+      .finally(() => {
+        prFetchByCaseId.current.delete(caseId);
+      });
+
+    prFetchByCaseId.current.set(caseId, request);
+    return request;
+  };
+
   const value = useMemo(
     () => ({
       notifyNewPr,
@@ -208,11 +247,26 @@ const NotificationProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
         seenNotifications.current.add(note.id);
-        if (note.type === 'NEW_PR' || note.type === 'ASSIGNMENT') {
+        if (
+          note.type === 'NEW_PR' ||
+          note.type === 'ASSIGNMENT'
+        ) {
           pushToast({
             title: note.title || 'Notification',
             message: note.body,
             tone: note.severity === 'INFO' ? 'info' : 'success',
+          });
+        }
+
+        if (note.type === 'SUPPLIER_QUOTE_FILES_RECEIVED') {
+          void getPrNumberForCaseId(note.caseId).then((prNumber) => {
+            pushToast({
+              title: note.title || 'Supplier quote files received',
+              message: prNumber ? `${prNumber}: ${note.body}` : note.body,
+              tone: note.severity === 'INFO' ? 'info' : 'success',
+              actionLabel: prNumber ? 'View Quotes' : undefined,
+              actionHref: prNumber ? `/prs/${encodeURIComponent(prNumber)}?tab=quotes` : undefined,
+            });
           });
         }
         // Leave unread until user opens the PR/notification.
@@ -263,7 +317,9 @@ const ToastViewport = ({
         role="status"
         aria-live="polite"
         className={`motion-alert pointer-events-auto rounded-2xl border p-4 shadow-lg ${
-          toast.tone === 'warning'
+          toast.tone === 'error'
+            ? 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-100'
+            : toast.tone === 'warning'
             ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100'
             : 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900/60 dark:bg-emerald-950/40 dark:text-emerald-100'
         }`}
@@ -278,11 +334,23 @@ const ToastViewport = ({
                 {toast.message}
               </p>
             ) : null}
+            {toast.actionHref && toast.actionLabel ? (
+              <a
+                href={toast.actionHref}
+                className="mt-3 inline-flex rounded-md border border-current/30 px-2 py-1 text-xs font-medium opacity-90 transition hover:opacity-100"
+              >
+                {toast.actionLabel}
+              </a>
+            ) : null}
           </div>
           <button
             type="button"
             onClick={() => onDismiss(toast.id)}
-            className="rounded-full p-1 text-emerald-700/70 transition hover:text-emerald-900 dark:text-emerald-200/70 dark:hover:text-emerald-100"
+            className={`rounded-full p-1 transition ${
+              toast.tone === 'error'
+                ? 'text-rose-700/70 hover:text-rose-900 dark:text-rose-200/70 dark:hover:text-rose-100'
+                : 'text-emerald-700/70 hover:text-emerald-900 dark:text-emerald-200/70 dark:hover:text-emerald-100'
+            }`}
             aria-label="Dismiss notification"
           >
             ✕

@@ -4,7 +4,9 @@ export type CaseStatus =
   | 'ASSIGNED'
   | 'WAITING_QUOTES'
   | 'READY_FOR_REVIEW'
-  | 'READY_TO_SEND'
+  | 'IN_REVIEW'
+  | 'REQUEST_INVOICE'
+  | 'WAITING_INVOICE'
   | 'CLOSED_PAID'
   | 'SENT'
   | 'CLOSED';

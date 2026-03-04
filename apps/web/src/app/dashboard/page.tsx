@@ -100,7 +100,9 @@ export default function DashboardPage() {
       { label: 'Assigned', status: 'ASSIGNED' },
       { label: 'Waiting Quotes', status: 'WAITING_QUOTES' },
       { label: 'Ready for Review', status: 'READY_FOR_REVIEW' },
-      { label: 'Ready to Send', status: 'READY_TO_SEND' },
+      { label: 'In review', status: 'IN_REVIEW' },
+      { label: 'Request Invoice', status: 'REQUEST_INVOICE' },
+      { label: 'Waiting for Invoice', status: 'WAITING_INVOICE' },
       { label: 'Closed & Paid', status: 'CLOSED_PAID' },
     ];
     return stageConfig.map((stage) => ({
@@ -167,7 +169,7 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-7">
               {stageData.map((stage, index) => {
                 const colors = [
                   { bgColor: 'bg-green-50', borderColor: 'border-green-200', textColor: 'text-green-700', badgeBg: 'bg-green-500' },
@@ -182,7 +184,13 @@ export default function DashboardPage() {
                   <div
                     key={stage.label}
                     className={`motion-alert cursor-pointer rounded-lg border ${color.borderColor} ${color.bgColor} p-4 dark:border-slate-800 dark:bg-slate-900`}
-                    onClick={() => router.push(`/prs/inbox?status=${stage.status}`)}
+                    onClick={() =>
+                      router.push(
+                        `${
+                          currentUser?.role === 'ADMIN' ? '/prs/all' : '/prs/inbox'
+                        }?status=${stage.status}`,
+                      )
+                    }
                   >
                     <div className="flex items-center gap-2">
                       <div className={`h-2 w-2 rounded-full ${color.badgeBg}`}></div>
@@ -224,7 +232,9 @@ export default function DashboardPage() {
                     'ASSIGNED': { bgColor: 'bg-purple-100', textColor: 'text-purple-700', label: 'Assigned' },
                     'WAITING_QUOTES': { bgColor: 'bg-amber-100', textColor: 'text-amber-700', label: 'Waiting Quotes' },
                     'READY_FOR_REVIEW': { bgColor: 'bg-orange-100', textColor: 'text-orange-700', label: 'Ready for Review' },
-                    'READY_TO_SEND': { bgColor: 'bg-blue-100', textColor: 'text-blue-700', label: 'Ready to Send' },
+                    'IN_REVIEW': { bgColor: 'bg-blue-100', textColor: 'text-blue-700', label: 'In review' },
+                    'REQUEST_INVOICE': { bgColor: 'bg-indigo-100', textColor: 'text-indigo-700', label: 'Request Invoice' },
+                    'WAITING_INVOICE': { bgColor: 'bg-cyan-100', textColor: 'text-cyan-700', label: 'Waiting for Invoice' },
                     'CLOSED_PAID': { bgColor: 'bg-emerald-100', textColor: 'text-emerald-700', label: 'Closed & Paid' },
                   } as const;
                   type StatusColor = (typeof statusColorMap)[keyof typeof statusColorMap];

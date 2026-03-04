@@ -28,10 +28,20 @@ export const caseStatusColors: Record<string, { bg: string; text: string; border
     text: 'text-orange-700',
     border: 'border-orange-200',
   },
-  READY_TO_SEND: {
+  IN_REVIEW: {
     bg: 'bg-blue-50',
     text: 'text-blue-700',
     border: 'border-blue-200',
+  },
+  REQUEST_INVOICE: {
+    bg: 'bg-indigo-50',
+    text: 'text-indigo-700',
+    border: 'border-indigo-200',
+  },
+  WAITING_INVOICE: {
+    bg: 'bg-cyan-50',
+    text: 'text-cyan-700',
+    border: 'border-cyan-200',
   },
   CLOSED_PAID: {
     bg: 'bg-emerald-50',

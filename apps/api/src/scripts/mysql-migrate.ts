@@ -54,6 +54,7 @@ const schemaStatements = [
   `create table if not exists cases (
     id char(36) primary key,
     pr_number varchar(64) not null,
+    message_id varchar(255) not null,
     subject varchar(255) not null,
     requester_name varchar(255) not null,
     requester_email varchar(255) not null,
@@ -208,6 +209,24 @@ async function run() {
       'alter table suppliers add column location varchar(255) null',
     );
   }
+
+  const [caseColumnsResult] = await connection.execute(
+    'select COLUMN_NAME, IS_NULLABLE from information_schema.columns where table_schema = ? and table_name = ?',
+    [database, 'cases'],
+  );
+  const caseColumns = caseColumnsResult as Array<{ COLUMN_NAME: string; IS_NULLABLE: 'YES' | 'NO' }>;
+  const messageIdColumn = caseColumns.find((column) => column.COLUMN_NAME === 'message_id');
+  if (!messageIdColumn) {
+    await connection.execute('alter table cases add column message_id varchar(255) null after pr_number');
+  }
+
+  await connection.execute(
+    "update cases set message_id = concat('legacy-', replace(uuid(), '-', '')) where message_id is null or message_id = ''",
+  );
+  await connection.execute('alter table cases modify column message_id varchar(255) not null');
+  await connection.execute(
+    "update cases set status = 'IN_REVIEW' where status = 'READY_TO_SEND'",
+  );
 
   await connection.end();
 

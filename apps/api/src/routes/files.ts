@@ -7,6 +7,12 @@ import { requireAuth } from '../lib/require-auth.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads', 'quotes');
 const PDF_MIME_TYPE = 'application/pdf';
+const allowedFileTypes = new Set([
+  'PR_ATTACHMENT',
+  'QUOTE_ATTACHMENT',
+  'PO_ATTACHMENT',
+  'SUPPLIER_INVOICE',
+]);
 
 function isPdfUpload(filename: string, mimetype: string) {
   const normalizedMimeType = mimetype.toLowerCase();
@@ -33,9 +39,16 @@ export async function fileRoutes(app: FastifyInstance) {
     await pipeline(data.file, fs.createWriteStream(targetPath));
     const stats = await fs.promises.stat(targetPath);
 
+    const requestedTypeRaw = (data.fields?.type as { value?: unknown } | undefined)?.value;
+    const requestedType =
+      typeof requestedTypeRaw === 'string' && requestedTypeRaw.trim().length > 0
+        ? requestedTypeRaw.trim().toUpperCase()
+        : 'PR_ATTACHMENT';
+    const fileType = allowedFileTypes.has(requestedType) ? requestedType : 'PR_ATTACHMENT';
+
     const fileRecord = await createFile({
       caseId: id,
-      type: 'PR_ATTACHMENT',
+      type: fileType,
       filename: data.filename,
       mimeType: data.mimetype,
       size: Number(data.fields?.size ?? stats.size ?? 0),
