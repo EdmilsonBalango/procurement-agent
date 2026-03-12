@@ -2,7 +2,6 @@
 
 ARG NODE_VERSION=20.19.0
 ARG PNPM_VERSION=9.12.0
-ARG INTERNAL_API_URL=http://api:3001
 
 FROM node:${NODE_VERSION}-alpine AS base
 WORKDIR /app
@@ -15,10 +14,6 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 FROM base AS build
 
-ARG INTERNAL_API_URL
-
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV INTERNAL_API_URL=${INTERNAL_API_URL}
 ENV CI=true
 
 COPY . .
@@ -27,26 +22,21 @@ RUN --mount=type=cache,target=/pnpm/store \
     pnpm install --frozen-lockfile
 
 RUN --mount=type=cache,target=/pnpm/store \
-    pnpm --filter @procurement/web exec next build --webpack
+    pnpm --filter @procurement/api build
 
 FROM node:${NODE_VERSION}-alpine AS runner
-WORKDIR /app
-
-ARG INTERNAL_API_URL
+WORKDIR /app/apps/api
 
 ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
-ENV INTERNAL_API_URL=${INTERNAL_API_URL}
+ENV PORT=3001
 
 RUN apk add --no-cache libc6-compat
+RUN mkdir -p /app/apps/api/uploads
 
-COPY --from=build /app/apps/web/.next/standalone ./
-COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /app /app
 
 USER node
 
-EXPOSE 3000
+EXPOSE 3001
 
-CMD ["node", "apps/web/server.js"]
+CMD ["node", "dist/src/server.js"]

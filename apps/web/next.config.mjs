@@ -10,6 +10,14 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@procurement/shared', '@procurement/ui'],
   typedRoutes: true,
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: `${process.env.INTERNAL_API_URL ?? 'http://api:3001'}/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

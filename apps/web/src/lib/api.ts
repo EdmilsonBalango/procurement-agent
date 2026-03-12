@@ -1,6 +1,11 @@
 import { QueryClient } from '@tanstack/react-query';
 
-export const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+const browserApiBaseUrl = '/api';
+const serverApiBaseUrl =
+  process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+
+export const apiBaseUrl =
+  typeof window === 'undefined' ? serverApiBaseUrl : browserApiBaseUrl;
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = { ...(options.headers ?? {}) } as Record<string, string>;
