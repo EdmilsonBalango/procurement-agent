@@ -1,9 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Card, CardContent, CardHeader } from '@procurement/ui';
+import { Badge, Button, Card, CardContent, CardHeader } from '@procurement/ui';
 import { apiFetch } from '../../lib/api';
+
+type HealthStatus = 'checking' | 'up' | 'down';
+
+type HealthResponse = {
+  api: 'up';
+  database: 'up' | 'down';
+};
+
+function StatusBadge({ label, status }: { label: string; status: HealthStatus }) {
+  const className =
+    status === 'up'
+      ? 'border-emerald-100 bg-emerald-50/70 text-emerald-700'
+      : status === 'down'
+        ? 'border-rose-100 bg-rose-50/70 text-rose-700'
+        : 'border-amber-100 bg-amber-50/70 text-amber-700';
+
+  const value = status === 'checking' ? 'Checking' : status === 'up' ? 'Online' : 'Offline';
+
+  return (
+    <div className="flex items-center justify-end gap-2 text-[11px] text-slate-500">
+      <span>{label}</span>
+      <Badge className={`px-2 py-0.5 text-[10px] font-medium ${className}`}>{value}</Badge>
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,6 +36,43 @@ export default function LoginPage() {
   const [password, setPassword] = useState('Password123!');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [apiStatus, setApiStatus] = useState<HealthStatus>('checking');
+  const [databaseStatus, setDatabaseStatus] = useState<HealthStatus>('checking');
+
+  useEffect(() => {
+    let active = true;
+
+    const checkHealth = async () => {
+      try {
+        const response = await apiFetch<HealthResponse>('/health');
+        if (!active) {
+          return;
+        }
+        setApiStatus(response.api === 'up' ? 'up' : 'down');
+        setDatabaseStatus(response.database === 'up' ? 'up' : 'down');
+      } catch (err) {
+        const message = err instanceof Error ? err.message.toLowerCase() : '';
+        if (!active) {
+          return;
+        }
+        if (message.includes('database')) {
+          setApiStatus('up');
+          setDatabaseStatus('down');
+          return;
+        }
+        setApiStatus('down');
+        setDatabaseStatus('down');
+      }
+    };
+
+    void checkHealth();
+    const interval = window.setInterval(checkHealth, 10000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -34,7 +96,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-6">
+    <div className="relative flex min-h-screen items-center justify-center bg-background px-6">
       <Card className="w-full max-w-md">
         <CardHeader>
           <h1 className="text-xl font-semibold text-heading">Sign in</h1>
@@ -78,6 +140,10 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
+      <div className="pointer-events-none fixed bottom-4 right-4 space-y-1.5 text-right opacity-80 sm:bottom-5 sm:right-5">
+        <StatusBadge label="API" status={apiStatus} />
+        <StatusBadge label="DB" status={databaseStatus} />
+      </div>
     </div>
   );
 }

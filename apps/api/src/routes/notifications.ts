@@ -4,6 +4,7 @@ import {
   onNotificationCreated,
   updateNotification,
 } from '../lib/db.js';
+import { getAllowedCorsOrigin } from '../lib/cors.js';
 import { requireAuth } from '../lib/require-auth.js';
 
 export async function notificationRoutes(app: FastifyInstance) {
@@ -13,14 +14,18 @@ export async function notificationRoutes(app: FastifyInstance) {
 
   app.get('/notifications/stream', { preHandler: requireAuth }, async (request, reply) => {
     const userId = request.user?.id ?? '';
-    const origin = request.headers.origin ?? 'http://localhost:3000';
-    reply.raw.writeHead(200, {
+    const responseHeaders: Record<string, string> = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Credentials': 'true',
-    });
+    };
+    const origin = getAllowedCorsOrigin(request.headers.origin);
+    if (origin) {
+      responseHeaders['Access-Control-Allow-Origin'] = origin;
+      responseHeaders['Access-Control-Allow-Credentials'] = 'true';
+    }
+
+    reply.raw.writeHead(200, responseHeaders);
     reply.hijack();
     reply.raw.flushHeaders?.();
 

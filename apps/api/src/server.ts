@@ -12,11 +12,13 @@ import { caseRoutes } from './routes/cases.js';
 import { supplierRoutes } from './routes/suppliers.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { metricsRoutes } from './routes/metrics.js';
+import { healthRoutes } from './routes/health.js';
 import { fileRoutes } from './routes/files.js';
 import { webhookRoutes } from './routes/webhooks.js';
 import { prRoutes } from './routes/prs.js';
 import { userRoutes } from './routes/users.js';
 import { emailRoutes } from './routes/emails.js';
+import { isAllowedCorsOrigin } from './lib/cors.js';
 import { initDb } from './lib/db.js';
 
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
@@ -29,30 +31,15 @@ const app = Fastify({
 await initDb();
 
 await app.register(cookie);
-const allowedOrigins = (process.env.CORS_ORIGIN ?? 'http://localhost:3000')
-  .split(',')
-  .map((origin) => origin.trim())
-  .filter(Boolean);
 
 await app.register(cors, {
   origin: (origin, callback) => {
-    if (!origin) {
-      callback(null, true);
-      return;
-    }
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-      return;
-    }
-    if (process.env.NODE_ENV !== 'production') {
-      callback(null, true);
-      return;
-    }
-    callback(new Error('Not allowed'), false);
+    callback(null, isAllowedCorsOrigin(origin));
   },
   credentials: true,
 });
 await app.register(multipart);
+await app.register(healthRoutes);
 
 await app.register(swagger, {
   openapi: {
