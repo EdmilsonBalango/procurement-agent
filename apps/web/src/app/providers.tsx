@@ -2,6 +2,7 @@
 
 import { QueryClientProvider } from '@tanstack/react-query';
 import React, { ReactNode, createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { apiBaseUrl, apiFetch, queryClient } from '../lib/api';
 
 type ThemeMode = 'light' | 'dark';
@@ -51,6 +52,7 @@ type NotificationContextValue = {
 };
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
+const PUBLIC_NOTIFICATION_ROUTES = new Set(['/login']);
 
 
 const getPreferredTheme = (): ThemeMode => {
@@ -133,6 +135,7 @@ const SearchProvider = ({ children }: { children: ReactNode }) => {
 };
 
 const NotificationProvider = ({ children }: { children: ReactNode }) => {
+  const pathname = usePathname();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timeouts = useRef<Map<string, number>>(new Map());
   const seenNotifications = useRef<Set<string>>(new Set());
@@ -220,6 +223,10 @@ const NotificationProvider = ({ children }: { children: ReactNode }) => {
   );
 
   useEffect(() => {
+    if (PUBLIC_NOTIFICATION_ROUTES.has(pathname)) {
+      return;
+    }
+
     let closed = false;
 
     const connect = () => {
@@ -293,7 +300,7 @@ const NotificationProvider = ({ children }: { children: ReactNode }) => {
         sourceRef.current.close();
       }
     };
-  }, []);
+  }, [pathname]);
 
   return (
     <NotificationContext.Provider value={value}>

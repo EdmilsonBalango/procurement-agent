@@ -1,9 +1,9 @@
 import mysql from 'mysql2/promise';
 
-const host = process.env.MYSQL_HOST ?? '192.168.88.4';
+const host = process.env.MYSQL_HOST ?? '127.0.0.1';
 const port = Number(process.env.MYSQL_PORT ?? 3306);
 const user = process.env.MYSQL_USER ?? 'root';
-const password = process.env.MYSQL_PASSWORD ?? 'Karingani@1';
+const password = process.env.MYSQL_PASSWORD ?? '';
 const database = process.env.MYSQL_DATABASE ?? 'procuremes-agent-test';
 const connectionLimit = Number(process.env.MYSQL_CONNECTION_LIMIT ?? 10);
 

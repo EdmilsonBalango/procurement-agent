@@ -33,11 +33,6 @@ export const loginSchema = z.object({
   password: z.string().min(8),
 });
 
-export const mfaVerifySchema = z.object({
-  email: z.string().email(),
-  code: z.string().length(6),
-});
-
 export const createCaseSchema = z.object({
   prNumber: z.string().min(3),
   messageId: z.string().min(1),
@@ -91,7 +86,6 @@ export const supplierSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
-export type MfaVerifyInput = z.infer<typeof mfaVerifySchema>;
 export type CreateCaseInput = z.infer<typeof createCaseSchema>;
 export type UpdateCaseInput = z.infer<typeof updateCaseSchema>;
 export type AssignCaseInput = z.infer<typeof assignCaseSchema>;

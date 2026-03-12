@@ -21,5 +21,13 @@ services:
       NODE_ENV: production
       PORT: 3001
       CORS_ORIGIN: http://localhost:3000,http://web:3000
+      MYSQL_HOST: ${MYSQL_HOST:-host.docker.internal}
+      MYSQL_PORT: ${MYSQL_PORT:-3306}
+      MYSQL_USER: ${MYSQL_USER:-root}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-Karingani@1}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-procuremes-agent-test}
+      MYSQL_CONNECTION_LIMIT: ${MYSQL_CONNECTION_LIMIT:-10}
+    extra_hosts:
+      - host.docker.internal:host-gateway
     expose:
       - 3001

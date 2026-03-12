@@ -25,9 +25,14 @@ pnpm dev
 | --- | --- |
 | `DATABASE_PROVIDER` | Prisma provider (default `sqlite`). For Postgres set `postgresql`. |
 | `DATABASE_URL` | Database connection string. |
+| `MYSQL_HOST` | MySQL host for the Fastify API. In Docker Compose this defaults to `host.docker.internal`. |
+| `MYSQL_PORT` | MySQL port (default `3306`). |
+| `MYSQL_USER` | MySQL user (default `root`). |
+| `MYSQL_PASSWORD` | MySQL password. |
+| `MYSQL_DATABASE` | MySQL database name (default `procuremes-agent-test`). |
 | `SESSION_TTL_HOURS` | Session expiration in hours (default 168). |
 | `MFA_TTL_MINUTES` | MFA code expiration in minutes (default 10). |
-| `NEXT_PUBLIC_API_URL` | Optional API base URL for the dashboard. |
+| `NEXT_PUBLIC_API_URL` | Optional browser API base URL for non-proxied setups. |
 
 ## MFA Behavior
 - Login uses email + password.

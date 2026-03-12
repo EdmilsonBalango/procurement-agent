@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const SESSION_COOKIE = 'procurement_session';
-const PUBLIC_ROUTES = new Set(['/login', '/mfa']);
+const PUBLIC_ROUTES = new Set(['/login']);
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

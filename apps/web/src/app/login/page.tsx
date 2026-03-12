@@ -79,15 +79,11 @@ export default function LoginPage() {
     setLoading(true);
     setError('');
     try {
-      const response = await apiFetch<{ requiresMfa: boolean }>('/auth/login', {
+      await apiFetch<{ success: true }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
-      if (response.requiresMfa) {
-        router.push(`/mfa?email=${encodeURIComponent(email)}`);
-      } else {
-        router.push('/dashboard');
-      }
+      router.push('/dashboard');
     } catch (err) {
       setError((err as Error).message);
     } finally {
