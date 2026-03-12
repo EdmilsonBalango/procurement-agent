@@ -7,9 +7,12 @@ export type CaseStatus =
   | 'IN_REVIEW'
   | 'REQUEST_INVOICE'
   | 'WAITING_INVOICE'
+  | 'REQUEST_RECEIPT'
+  | 'WAITING_RECEIPT'
   | 'CLOSED_PAID'
   | 'SENT'
-  | 'CLOSED';
+  | 'CLOSED'
+  | 'QUARANTINE';
 
 export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
@@ -17,6 +20,7 @@ export type PrRecord = {
   id: string;
   status: CaseStatus;
   summary: string;
+  created: string;
   neededBy: string;
   requester: string;
   department?: string;

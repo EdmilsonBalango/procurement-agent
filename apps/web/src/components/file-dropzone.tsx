@@ -5,7 +5,9 @@ import { UploadCloud } from 'lucide-react';
 
 type FileDropzoneProps = {
   label?: string;
-  onFileSelected: (file: File) => void;
+  onFileSelected?: (file: File) => void;
+  onFilesSelected?: (files: File[]) => void;
+  multiple?: boolean;
   disabled?: boolean;
   accept?: string;
 };
@@ -13,6 +15,8 @@ type FileDropzoneProps = {
 export const FileDropzone = ({
   label,
   onFileSelected,
+  onFilesSelected,
+  multiple = false,
   disabled,
   accept,
 }: FileDropzoneProps) => {
@@ -23,7 +27,12 @@ export const FileDropzone = ({
     if (!files || files.length === 0) {
       return;
     }
-    onFileSelected(files[0]!);
+    const selected = Array.from(files);
+    if (multiple || onFilesSelected) {
+      onFilesSelected?.(selected);
+      return;
+    }
+    onFileSelected?.(selected[0]!);
   };
 
   return (
@@ -57,6 +66,7 @@ export const FileDropzone = ({
         ref={inputRef}
         type="file"
         className="hidden"
+        multiple={multiple}
         accept={accept}
         onChange={(event) => handleFiles(event.target.files)}
         disabled={disabled}

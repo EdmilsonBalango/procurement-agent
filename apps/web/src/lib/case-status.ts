@@ -9,9 +9,12 @@ const caseStatusLabelMap: Record<CaseStatus, string> = {
   IN_REVIEW: 'In review',
   REQUEST_INVOICE: 'Request Invoice',
   WAITING_INVOICE: 'Waiting for Invoice',
+  REQUEST_RECEIPT: 'Request Receipt',
+  WAITING_RECEIPT: 'Waiting for Receipt',
   CLOSED_PAID: 'Closed & Paid',
   SENT: 'Sent',
   CLOSED: 'Closed',
+  QUARANTINE: 'Quarantine',
 };
 
 export function getCaseStatusLabel(status: string) {

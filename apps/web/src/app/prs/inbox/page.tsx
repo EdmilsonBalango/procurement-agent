@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PageShell } from '../../../components/page-shell';
+import { TablePagination } from '../../../components/table-pagination';
 import { Badge, Button, Card, CardContent, CardHeader, Table, TableCell, TableHead, TableHeader, TableRow } from '@procurement/ui';
 import { Filter } from 'lucide-react';
 import { apiFetch } from '../../../lib/api';
@@ -16,6 +17,7 @@ type ApiCaseRecord = {
   subject: string;
   requesterName: string;
   priority: PrRecord['priority'];
+  createdAt: string;
   updatedAt: string;
   assignedBuyer?: { name: string } | null;
   quotes?: Array<{ id: string }>;
@@ -36,6 +38,8 @@ function InboxPageContent() {
   const [buyerFilter, setBuyerFilter] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<ApiMe | null>(null);
   const [records, setRecords] = useState<PrRecord[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     const statusParam = searchParams.get('status');
@@ -71,6 +75,10 @@ function InboxPageContent() {
           id: record.prNumber,
           status: record.status,
           summary: record.subject,
+          created: new Date(record.createdAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
           neededBy: 'TBD',
           requester: record.requesterName,
           buyer: record.assignedBuyer?.name ?? 'Unassigned',
@@ -81,7 +89,7 @@ function InboxPageContent() {
             day: 'numeric',
           }),
           items: [],
-        }));
+        })).filter((record) => !['CLOSED', 'CLOSED_PAID'].includes(record.status));
         setRecords(mapped);
       } catch {
         // ignore
@@ -114,8 +122,20 @@ function InboxPageContent() {
         requester: pr.requester,
         status: pr.status,
         priority: pr.priority,
+        created: pr.created,
       }));
   }, [records, statusFilter, buyerFilter]);
+  const paginatedRows = useMemo(
+    () => filteredRows.slice((page - 1) * pageSize, page * pageSize),
+    [filteredRows, page, pageSize],
+  );
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [filteredRows.length, page, pageSize]);
 
   const toggleValue = (value: string, setValue: (next: string[]) => void, current: string[]) => {
     if (current.includes(value)) {
@@ -217,10 +237,11 @@ function InboxPageContent() {
                   <TableHead>Requester</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Priority</TableHead>
+                  <TableHead>Created</TableHead>
                 </TableRow>
               </TableHeader>
               <tbody>
-                {filteredRows.map((row) => (
+                {paginatedRows.map((row) => (
                   <TableRow
                     key={row.pr}
                     className="cursor-pointer hover:bg-slate-50"
@@ -234,10 +255,21 @@ function InboxPageContent() {
                     <TableCell>
                       <Badge variant="priority" status={row.priority} />
                     </TableCell>
+                    <TableCell>{row.created}</TableCell>
                   </TableRow>
                 ))}
               </tbody>
             </Table>
+            <TablePagination
+              page={page}
+              pageSize={pageSize}
+              totalItems={filteredRows.length}
+              onPageChange={setPage}
+              onPageSizeChange={(nextPageSize) => {
+                setPageSize(nextPageSize);
+                setPage(1);
+              }}
+            />
           </CardContent>
         </Card>
       </div>

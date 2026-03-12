@@ -23,7 +23,41 @@ export type EmailWebhookPayload = {
   }>;
 };
 
+export type PopWebhookPayload = {
+  type: 'SEND_POP';
+  subject: string;
+  message: string;
+  data: Array<{
+    supplier: {
+      name: string;
+      emailAddress: string;
+    };
+    pop: {
+      filename: string;
+      mimeType: string;
+      contentBase64: string;
+    };
+  }>;
+};
+
 export async function forwardEmailToWebhook(payload: EmailWebhookPayload) {
+  const response = await fetch(webhookUrl_test, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const responseText = await response.text();
+  return {
+    ok: response.ok,
+    status: response.status,
+    body: responseText,
+  };
+}
+
+export async function forwardPopToWebhook(payload: PopWebhookPayload) {
   const response = await fetch(webhookUrl_test, {
     method: 'POST',
     headers: {

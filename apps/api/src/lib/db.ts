@@ -162,9 +162,13 @@ const statuses = [
   'IN_REVIEW',
   'REQUEST_INVOICE',
   'WAITING_INVOICE',
+  'REQUEST_RECEIPT',
+  'WAITING_RECEIPT',
+  'CLOSED_PAID',
   'SENT',
   'CLOSED',
   'MISSING_INFO',
+  'QUARANTINE',
 ];
 
 const now = () => new Date();

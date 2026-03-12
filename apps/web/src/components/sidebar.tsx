@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { BadgeCheck, Bell, Briefcase, LayoutGrid, Settings, Truck, Users } from 'lucide-react';
+import { Archive, BadgeCheck, Bell, Briefcase, LayoutGrid, Settings, Truck, Users } from 'lucide-react';
 import { cn } from '@procurement/ui';
 import { apiFetch } from '../lib/api';
 
@@ -15,6 +15,7 @@ const navItems = [
   { href: '/dashboard' as const, label: 'Dashboard', icon: LayoutGrid },
   { href: '/prs/inbox' as const, label: 'PR Inbox', icon: Briefcase },
   { href: '/prs/all' as const, label: 'All PRs', icon: BadgeCheck },
+  { href: '/prs/archive' as const, label: 'Archive', icon: Archive },
   { href: '/notifications' as const, label: 'Notifications', icon: Bell },
   { href: '/suppliers' as const, label: 'Suppliers', icon: Truck },
   { href: '/settings' as const, label: 'Settings', icon: Settings },

@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { pipeline } from 'node:stream/promises';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createFile, listFilesByCase } from '../lib/db.js';
+import { createFile, getCaseById, listFilesByCase } from '../lib/db.js';
 import { requireAuth } from '../lib/require-auth.js';
 
 const uploadDir = path.resolve(process.cwd(), 'uploads', 'quotes');
@@ -12,6 +12,8 @@ const allowedFileTypes = new Set([
   'QUOTE_ATTACHMENT',
   'PO_ATTACHMENT',
   'SUPPLIER_INVOICE',
+  'POP_ATTACHMENT',
+  'RECEIPT_ATTACHMENT',
 ]);
 
 function isPdfUpload(filename: string, mimetype: string) {
@@ -23,6 +25,13 @@ function isPdfUpload(filename: string, mimetype: string) {
 export async function fileRoutes(app: FastifyInstance) {
   app.post('/cases/:id/files', { preHandler: requireAuth }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const caseRecord = await getCaseById(id);
+    if (!caseRecord) {
+      return reply.status(404).send({ message: 'Not found' });
+    }
+    if (['CLOSED', 'CLOSED_PAID'].includes(caseRecord.status) && request.user?.role !== 'ADMIN') {
+      return reply.status(403).send({ message: 'Closed PRs can only be changed by admins.' });
+    }
     const data = await request.file();
     if (!data) {
       return reply.status(400).send({ message: 'No file provided' });

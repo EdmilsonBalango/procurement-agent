@@ -25,6 +25,7 @@ type ApiCaseRecord = {
   subject: string;
   requesterName: string;
   priority: PrRecord['priority'];
+  createdAt: string;
   updatedAt: string;
   assignedBuyer?: { name: string } | null;
 };
@@ -101,6 +102,10 @@ export const SearchResults = () => {
             id: record.prNumber,
             status: record.status,
             summary: record.subject,
+            created: new Date(record.createdAt).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+            }),
             neededBy: 'TBD',
             requester: record.requesterName,
             buyer: record.assignedBuyer?.name ?? 'Unassigned',

@@ -43,6 +43,16 @@ export const caseStatusColors: Record<string, { bg: string; text: string; border
     text: 'text-cyan-700',
     border: 'border-cyan-200',
   },
+  REQUEST_RECEIPT: {
+    bg: 'bg-teal-50',
+    text: 'text-teal-700',
+    border: 'border-teal-200',
+  },
+  WAITING_RECEIPT: {
+    bg: 'bg-lime-50',
+    text: 'text-lime-700',
+    border: 'border-lime-200',
+  },
   CLOSED_PAID: {
     bg: 'bg-emerald-50',
     text: 'text-emerald-700',

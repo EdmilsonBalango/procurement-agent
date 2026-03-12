@@ -180,7 +180,7 @@ export const Topbar = () => {
                       <p className="text-xs text-slate-500">No new notifications.</p>
                     ) : (
                       unreadNotifications.slice(0, 5).map((note) => (
-                        <div key={note.id} className="rounded-lg border border-amber-100 bg-amber-50 p-2">
+                        <div key={note.id} className="rounded-lg border border-green-200 bg-green-100 p-2">
                           <p className="text-sm font-semibold text-slate-800">{note.title}</p>
                           <p className="text-xs text-slate-600">{note.body}</p>
                         </div>

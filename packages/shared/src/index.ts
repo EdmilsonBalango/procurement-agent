@@ -12,6 +12,9 @@ export const caseStatusValues = [
   'IN_REVIEW',
   'REQUEST_INVOICE',
   'WAITING_INVOICE',
+  'REQUEST_RECEIPT',
+  'WAITING_RECEIPT',
+  'CLOSED_PAID',
   'SENT',
   'CLOSED',
 ] as const;

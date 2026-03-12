@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { type ComponentProps, type ReactNode, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { PageShell } from '../../../components/page-shell';
 import { DocumentVisualizer } from '../../../components/document-visualizer';
@@ -47,6 +47,7 @@ type ApiCaseSummary = {
 };
 
 type ApiCaseDetail = ApiCaseSummary & {
+  createdAt: string;
   updatedAt: string;
   items: Array<{
     id: string;
@@ -98,6 +99,7 @@ type ApiSupplier = {
   id: string;
   name: string;
   email: string;
+  location?: string | null;
   categories: string;
   isActive: boolean;
 };
@@ -110,6 +112,15 @@ type UploadedCaseFile = {
   storageKey: string;
   uploadedBy: string;
   createdAt: string;
+};
+
+type PopFileEntry = {
+  localId: string;
+  supplierId: string;
+  filename: string;
+  source: 'new' | 'existing';
+  file?: File;
+  fileId?: string;
 };
 
 interface Document {
@@ -129,6 +140,51 @@ const isWorkspaceTab = (value: string | null): value is WorkspaceTab =>
 const isPdfFile = (file: File) =>
   file.type.toLowerCase() === PDF_MIME_TYPE || file.name.toLowerCase().endsWith('.pdf');
 
+type WorkflowActionButtonProps = Omit<ComponentProps<typeof Button>, 'size' | 'children'> & {
+  label: string;
+};
+
+function WorkflowActionButton({ label, ...props }: WorkflowActionButtonProps) {
+  return (
+    <Button size="sm" {...props}>
+      {label}
+    </Button>
+  );
+}
+
+type WorkflowDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  trigger: ReactNode;
+  title: string;
+  hiddenTitle: string;
+  className?: string;
+  children: ReactNode;
+};
+
+function WorkflowDialog({
+  open,
+  onOpenChange,
+  trigger,
+  title,
+  hiddenTitle,
+  className = 'motion-modal',
+  children,
+}: WorkflowDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent className={className}>
+        <DialogTitle>
+          <VisuallyHidden>{hiddenTitle}</VisuallyHidden>
+        </DialogTitle>
+        <h3 className="text-lg font-semibold text-heading">{title}</h3>
+        {children}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function CaseWorkspacePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -144,6 +200,7 @@ export default function CaseWorkspacePage() {
     id: prId,
     status: 'NEW',
     summary: 'New procurement request',
+    created: 'Just now',
     neededBy: 'TBD',
     requester: 'Unknown',
     buyer: 'Unassigned',
@@ -232,6 +289,20 @@ export default function CaseWorkspacePage() {
   const [manualInvoiceFileError, setManualInvoiceFileError] = useState<string | null>(null);
   const [uploadingManualInvoice, setUploadingManualInvoice] = useState(false);
   const [submittingManualInvoice, setSubmittingManualInvoice] = useState(false);
+  const [manualReceiptDialogOpen, setManualReceiptDialogOpen] = useState(false);
+  const [manualReceiptFile, setManualReceiptFile] = useState<{ id: string; filename: string } | null>(null);
+  const [manualReceiptFileError, setManualReceiptFileError] = useState<string | null>(null);
+  const [uploadingManualReceipt, setUploadingManualReceipt] = useState(false);
+  const [submittingManualReceipt, setSubmittingManualReceipt] = useState(false);
+  const [sendPopDialogOpen, setSendPopDialogOpen] = useState(false);
+  const [popMessage, setPopMessage] = useState('');
+  const [popFiles, setPopFiles] = useState<PopFileEntry[]>([]);
+  const [uploadedPopFiles, setUploadedPopFiles] = useState<Array<{ fileId: string; filename: string; supplierId: string }>>([]);
+  const [popUploadError, setPopUploadError] = useState<string | null>(null);
+  const [sendingPop, setSendingPop] = useState(false);
+  const [closingPr, setClosingPr] = useState(false);
+  const seenSupplierInvoiceFileIds = useRef<Set<string> | null>(null);
+  const seenReceiptFileIds = useRef<Set<string> | null>(null);
   const statusSteps: Array<{ label: string; status: PrRecord['status'] }> = [
     { label: 'New', status: 'NEW' },
     { label: 'Assigned', status: 'ASSIGNED' },
@@ -240,6 +311,8 @@ export default function CaseWorkspacePage() {
     { label: 'In review', status: 'IN_REVIEW' },
     { label: 'Request Invoice', status: 'REQUEST_INVOICE' },
     { label: 'Waiting for Invoice', status: 'WAITING_INVOICE' },
+    { label: 'Request Receipt', status: 'REQUEST_RECEIPT' },
+    { label: 'Waiting for Receipt', status: 'WAITING_RECEIPT' },
     { label: 'Closed & Paid', status: 'CLOSED_PAID' },
   ];
   const statusIndexMap: Record<PrRecord['status'], number> = {
@@ -251,15 +324,20 @@ export default function CaseWorkspacePage() {
     IN_REVIEW: 4,
     REQUEST_INVOICE: 5,
     WAITING_INVOICE: 6,
-    SENT: 7,
-    CLOSED: 7,
-    CLOSED_PAID: 7,
+    REQUEST_RECEIPT: 7,
+    WAITING_RECEIPT: 8,
+    SENT: 9,
+    CLOSED: 9,
+    CLOSED_PAID: 9,
+    QUARANTINE: 9,
   };
   const hasQuotes = quotes.length > 0;
   const effectiveStatus: PrRecord['status'] = [
     'IN_REVIEW',
     'REQUEST_INVOICE',
     'WAITING_INVOICE',
+    'REQUEST_RECEIPT',
+    'WAITING_RECEIPT',
     'SENT',
     'CLOSED',
     'CLOSED_PAID',
@@ -279,14 +357,36 @@ export default function CaseWorkspacePage() {
     IN_REVIEW: 'In review',
     REQUEST_INVOICE: 'Request Invoice',
     WAITING_INVOICE: 'Waiting for Invoice',
+    REQUEST_RECEIPT: 'Request Receipt',
+    WAITING_RECEIPT: 'Waiting for Receipt',
     SENT: 'Sent',
     CLOSED: 'Closed',
     CLOSED_PAID: 'Closed & Paid',
+    QUARANTINE: 'Quarantine',
   };
   const effectiveStatusLabel = statusLabelMap[effectiveStatus] ?? effectiveStatus;
+  const isWaitingInvoiceStatus = effectiveStatus === 'WAITING_INVOICE';
 
   const activeStepIndex = statusIndexMap[effectiveStatus] ?? 0;
-  const showSendForReviewButton = hasQuotes && (effectiveStatus !== 'IN_REVIEW' || hasNewQuoteAfterReview);
+  const hasReachedReviewStage = [
+    'IN_REVIEW',
+    'REQUEST_INVOICE',
+    'WAITING_INVOICE',
+    'REQUEST_RECEIPT',
+    'WAITING_RECEIPT',
+    'SENT',
+    'CLOSED',
+    'CLOSED_PAID',
+  ].includes(pr.status);
+  const showSendForReviewButton =
+    hasQuotes &&
+    !sendingReview &&
+    (hasReachedReviewStage ? pr.status === 'IN_REVIEW' && hasNewQuoteAfterReview : true);
+  const hasSupplierInvoice = caseFiles.some((file) => file.type === 'SUPPLIER_INVOICE');
+  const hasReceiptAttachment = caseFiles.some((file) => file.type === 'RECEIPT_ATTACHMENT');
+  const canSendPop = popFiles.length > 0 && popFiles.every((file) => file.supplierId.length > 0);
+  const isClosedPr = ['CLOSED', 'CLOSED_PAID'].includes(pr.status);
+  const isReadOnlyClosedPr = isClosedPr && currentUser?.role !== 'ADMIN';
 
   useEffect(() => {
     if (isWorkspaceTab(requestedTab)) {
@@ -406,6 +506,10 @@ export default function CaseWorkspacePage() {
           id: detail.prNumber,
           status: detail.status,
           summary: detail.subject,
+          created: new Date(detail.createdAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          }),
           neededBy: new Date(detail.neededBy).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
@@ -504,12 +608,105 @@ export default function CaseWorkspacePage() {
             .sort((a, b) => b - a)[0];
           const hasQuoteAfterReview =
             typeof lastInReviewAt === 'number'
-              ? (detail.quotes ?? []).some((quote) => new Date(quote.receivedAt).getTime() > lastInReviewAt)
+              ? (detail.quotes ?? []).some((quote) => new Date(quote.receivedAt).getTime() > lastInReviewAt) ||
+                (detail.files ?? []).some(
+                  (file) =>
+                    file.type === 'QUOTE_ATTACHMENT' &&
+                    new Date(file.createdAt).getTime() > lastInReviewAt,
+                )
               : false;
           setHasNewQuoteAfterReview(hasQuoteAfterReview);
         } else {
           setHasNewQuoteAfterReview(false);
         }
+        const supplierInvoiceFileIds = new Set<string>();
+        (detail.events ?? [])
+          .filter((event) => event.type === 'INVOICE_RECEIVED' && !event.actorUserId)
+          .forEach((event) => {
+            try {
+              const parsed = JSON.parse(event.detailJson) as {
+                files?: Array<{ fileId?: string }>;
+                fileId?: string;
+              };
+              (parsed.files ?? []).forEach((file) => {
+                if (file.fileId) {
+                  supplierInvoiceFileIds.add(file.fileId);
+                }
+              });
+              if (parsed.fileId) {
+                supplierInvoiceFileIds.add(parsed.fileId);
+              }
+            } catch {
+              // ignore malformed payloads
+            }
+          });
+
+        const currentInvoiceFiles = (detail.files ?? []).filter((file) => file.type === 'SUPPLIER_INVOICE');
+        if (seenSupplierInvoiceFileIds.current === null) {
+          seenSupplierInvoiceFileIds.current = new Set(currentInvoiceFiles.map((file) => file.id));
+        } else {
+          const newSupplierInvoiceFiles = currentInvoiceFiles.filter(
+            (file) =>
+              !seenSupplierInvoiceFileIds.current?.has(file.id) &&
+              supplierInvoiceFileIds.has(file.id),
+          );
+          if (newSupplierInvoiceFiles.length > 0) {
+            pushToast({
+              title: 'Supplier invoice received',
+              message:
+                newSupplierInvoiceFiles.length === 1
+                  ? `A new supplier invoice was received: ${newSupplierInvoiceFiles[0]!.filename}.`
+                  : `${newSupplierInvoiceFiles.length} new supplier invoices were received.`,
+              tone: 'success',
+            });
+          }
+          seenSupplierInvoiceFileIds.current = new Set(currentInvoiceFiles.map((file) => file.id));
+        }
+
+        const receiptFileIdsFromEvents = new Set<string>();
+        (detail.events ?? [])
+          .filter((event) => event.type === 'RECEIPT_RECEIVED' && !event.actorUserId)
+          .forEach((event) => {
+            try {
+              const parsed = JSON.parse(event.detailJson) as {
+                files?: Array<{ fileId?: string }>;
+                fileId?: string;
+              };
+              (parsed.files ?? []).forEach((file) => {
+                if (file.fileId) {
+                  receiptFileIdsFromEvents.add(file.fileId);
+                }
+              });
+              if (parsed.fileId) {
+                receiptFileIdsFromEvents.add(parsed.fileId);
+              }
+            } catch {
+              // ignore malformed payloads
+            }
+          });
+
+        const currentReceiptFiles = (detail.files ?? []).filter((file) => file.type === 'RECEIPT_ATTACHMENT');
+        if (seenReceiptFileIds.current === null) {
+          seenReceiptFileIds.current = new Set(currentReceiptFiles.map((file) => file.id));
+        } else {
+          const newReceiptFiles = currentReceiptFiles.filter(
+            (file) =>
+              !seenReceiptFileIds.current?.has(file.id) &&
+              receiptFileIdsFromEvents.has(file.id),
+          );
+          if (newReceiptFiles.length > 0) {
+            pushToast({
+              title: 'Supplier receipt received',
+              message:
+                newReceiptFiles.length === 1
+                  ? `A new supplier receipt was received: ${newReceiptFiles[0]!.filename}.`
+                  : `${newReceiptFiles.length} new supplier receipts were received.`,
+              tone: 'success',
+            });
+          }
+          seenReceiptFileIds.current = new Set(currentReceiptFiles.map((file) => file.id));
+        }
+
         setCaseFiles(detail.files ?? []);
         const mappedNotes =
           detail.notes?.map((note) => ({
@@ -522,6 +719,33 @@ export default function CaseWorkspacePage() {
           })) ?? [];
         setNotes(mappedNotes);
         const events = detail.events ?? [];
+        const supplierByPopFileId = new Map<string, string>();
+        events
+          .filter((event) => event.type === 'POP_SENT')
+          .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+          .forEach((event) => {
+            try {
+              const parsed = JSON.parse(event.detailJson) as {
+                data?: Array<{ supplierId?: string; fileId?: string }>;
+              };
+              (parsed.data ?? []).forEach((entry) => {
+                if (entry?.fileId && entry?.supplierId) {
+                  supplierByPopFileId.set(entry.fileId, entry.supplierId);
+                }
+              });
+            } catch {
+              // ignore malformed payloads
+            }
+          });
+        setUploadedPopFiles(
+          (detail.files ?? [])
+            .filter((file) => file.type === 'POP_ATTACHMENT')
+            .map((file) => ({
+              fileId: file.id,
+              filename: file.filename,
+              supplierId: supplierByPopFileId.get(file.id) ?? '',
+            })),
+        );
         const mappedEvents = events.map((event) => {
           let action = event.type;
           try {
@@ -557,7 +781,7 @@ export default function CaseWorkspacePage() {
       active = false;
       window.clearInterval(interval);
     };
-  }, [prId, usersById, emailBodyTouched]);
+  }, [prId, usersById, emailBodyTouched, pushToast]);
 
   const assignBuyer = async () => {
     if (!caseId || !selectedBuyer || assigning) {
@@ -758,6 +982,38 @@ export default function CaseWorkspacePage() {
     }
   };
 
+  const uploadManualReceiptAttachment = async (file: File) => {
+    if (!caseId || uploadingManualReceipt) {
+      return;
+    }
+    if (!isPdfFile(file)) {
+      setManualReceiptFileError('Only PDF documents can be uploaded.');
+      return;
+    }
+    setManualReceiptFileError(null);
+    setUploadingManualReceipt(true);
+    try {
+      const uploaded = await uploadCasePdf(file, 'RECEIPT_ATTACHMENT');
+      setManualReceiptFile({ id: uploaded.id, filename: uploaded.filename });
+      setCaseFiles((prev) => [
+        {
+          id: uploaded.id,
+          type: uploaded.type,
+          filename: uploaded.filename,
+          mimeType: uploaded.mimeType,
+          storageKey: uploaded.storageKey,
+          uploadedBy: uploaded.uploadedBy,
+          createdAt: uploaded.createdAt,
+        },
+        ...prev,
+      ]);
+    } catch {
+      setManualReceiptFileError('Failed to upload receipt PDF.');
+    } finally {
+      setUploadingManualReceipt(false);
+    }
+  };
+
   const uploadManualInvoiceAttachment = async (file: File) => {
     if (!caseId || uploadingManualInvoice) {
       return;
@@ -777,6 +1033,27 @@ export default function CaseWorkspacePage() {
     } finally {
       setUploadingManualInvoice(false);
     }
+  };
+
+  const uploadPopAttachments = async (files: File[]) => {
+    if (!caseId || files.length === 0) {
+      return;
+    }
+    if (files.some((file) => !isPdfFile(file))) {
+      setPopUploadError('Only PDF documents can be uploaded.');
+      return;
+    }
+    setPopUploadError(null);
+    setPopFiles((prev) => [
+      ...prev,
+      ...files.map((file) => ({
+        localId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        filename: file.name,
+        source: 'new' as const,
+        file,
+        supplierId: '',
+      })),
+    ]);
   };
 
   const saveQuote = async () => {
@@ -969,6 +1246,113 @@ export default function CaseWorkspacePage() {
     }
   };
 
+  const submitManualReceipt = async () => {
+    if (!manualReceiptFile || submittingManualReceipt) {
+      return;
+    }
+    setSubmittingManualReceipt(true);
+    try {
+      setManualReceiptDialogOpen(false);
+      setManualReceiptFile(null);
+      pushToast({
+        title: 'Receipt uploaded',
+        message: 'Receipt was uploaded successfully.',
+        tone: 'success',
+      });
+    } finally {
+      setSubmittingManualReceipt(false);
+    }
+  };
+
+  const sendPop = async () => {
+    if (!caseId || sendingPop || !canSendPop) {
+      return;
+    }
+    setSendingPop(true);
+    try {
+      const existingPopEntries = popFiles.filter(
+        (entry): entry is PopFileEntry & { source: 'existing'; fileId: string } =>
+          entry.source === 'existing' && Boolean(entry.fileId),
+      );
+      const newPopEntries = popFiles.filter(
+        (entry): entry is PopFileEntry & { source: 'new'; file: File } =>
+          entry.source === 'new' && Boolean(entry.file),
+      );
+      const uploadedNewPopFiles = await Promise.all(
+        newPopEntries.map(async (entry) => ({
+          supplierId: entry.supplierId,
+          uploaded: await uploadCasePdf(entry.file, 'POP_ATTACHMENT'),
+        })),
+      );
+      setCaseFiles((prev) => [...uploadedNewPopFiles.map((entry) => entry.uploaded), ...prev]);
+      const payload = {
+        message:
+          popMessage.trim() ||
+          `Please find attached POP for case ${pr.id}. Kindly confirm receipt.`,
+        data: [
+          ...existingPopEntries.map((entry) => ({
+            supplierId: entry.supplierId,
+            fileId: entry.fileId,
+          })),
+          ...uploadedNewPopFiles.map((entry) => ({
+            supplierId: entry.supplierId,
+            fileId: entry.uploaded.id,
+          })),
+        ],
+      };
+      await apiFetch<{ ok: boolean; status: PrRecord['status'] }>(`/cases/${caseId}/send-pop`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      setPr((prev) => ({ ...prev, status: 'WAITING_RECEIPT' }));
+      setSendPopDialogOpen(false);
+      setPopMessage('');
+      setPopFiles([]);
+      pushToast({
+        title: 'POP sent',
+        message: 'POP email sent to suppliers successfully.',
+        tone: 'success',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to send POP email.';
+      pushToast({
+        title: 'Failed to send POP',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setSendingPop(false);
+    }
+  };
+
+  const closePr = async () => {
+    if (!caseId || closingPr || !hasReceiptAttachment) {
+      return;
+    }
+    setClosingPr(true);
+    try {
+      await apiFetch(`/cases/${caseId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: 'CLOSED_PAID' }),
+      });
+      setPr((prev) => ({ ...prev, status: 'CLOSED_PAID' }));
+      pushToast({
+        title: 'PR closed',
+        message: 'The PR was closed successfully.',
+        tone: 'success',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to close PR.';
+      pushToast({
+        title: 'Failed to close PR',
+        message,
+        tone: 'error',
+      });
+    } finally {
+      setClosingPr(false);
+    }
+  };
+
   return (
     <PageShell>
       <div className="mx-auto flex max-w-6xl flex-col gap-6">
@@ -985,21 +1369,28 @@ export default function CaseWorkspacePage() {
               {pr.summary} • assigned to {pr.buyer} • Needed by {pr.neededBy}.
             </p>
           </div>
+          {!isReadOnlyClosedPr ? (
           <div className="flex items-center gap-3">
-            <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant={hasQuotes ? 'secondary' : pr.buyer !== 'Unassigned' ? 'secondary' : 'primary'}
-                >
-                  {pr.buyer !== 'Unassigned' ? 'Re-assign PR' : 'Assign buyer'}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="motion-modal">
-                <DialogTitle>
-                  <VisuallyHidden>Assign PR to buyer</VisuallyHidden>
-                </DialogTitle>
-                <h3 className="text-lg font-semibold text-heading">Assign PR to buyer</h3>
+            <WorkflowDialog
+              open={assignDialogOpen}
+              onOpenChange={setAssignDialogOpen}
+              trigger={
+                <WorkflowActionButton
+                  variant={
+                    isWaitingInvoiceStatus
+                      ? 'secondary'
+                      : hasQuotes
+                        ? 'secondary'
+                        : pr.buyer !== 'Unassigned'
+                          ? 'secondary'
+                          : 'primary'
+                  }
+                  label={pr.buyer !== 'Unassigned' ? 'Re-assign PR' : 'Assign buyer'}
+                />
+              }
+              title="Assign PR to buyer"
+              hiddenTitle="Assign PR to buyer"
+            >
                 <p className="mt-2 text-sm text-muted">
                   Use automatic or manually override the buyer assignment.
                 </p>
@@ -1043,11 +1434,10 @@ export default function CaseWorkspacePage() {
                     )}
                   </div>
                 </div>
-              </DialogContent>
-            </Dialog>
+            </WorkflowDialog>
             
             {pr.buyer !== 'Unassigned' ? (
-              <Dialog
+              <WorkflowDialog
                 open={requestDialogOpen}
                 onOpenChange={(open) => {
                   setRequestDialogOpen(open);
@@ -1055,20 +1445,23 @@ export default function CaseWorkspacePage() {
                     resetRequestDialog();
                   }
                 }}
+                trigger={
+                  <WorkflowActionButton
+                    variant={
+                      isWaitingInvoiceStatus ||
+                      effectiveStatus === 'READY_FOR_REVIEW' ||
+                      effectiveStatus === 'IN_REVIEW' ||
+                      effectiveStatus === 'WAITING_RECEIPT'
+                        ? 'secondary'
+                        : 'primary'
+                    }
+                    label="Request quotes"
+                  />
+                }
+                title="Request quotes"
+                hiddenTitle="Request quotes"
+                className="motion-modal w-full max-w-3xl"
               >
-                <DialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    variant={effectiveStatus === 'READY_FOR_REVIEW' ? 'secondary' : 'primary'}
-                  >
-                    Request quotes
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="motion-modal w-full max-w-3xl">
-                  <DialogTitle>
-                    <VisuallyHidden>Request quotes</VisuallyHidden>
-                  </DialogTitle>
-                  <h3 className="text-lg font-semibold text-heading">Request quotes</h3>
                   <p className="mt-2 text-sm text-muted">
                     Select suppliers, craft the email, and send your request.
                   </p>
@@ -1214,8 +1607,7 @@ export default function CaseWorkspacePage() {
                       <Button variant="secondary" size="sm">Cancel</Button>
                     </DialogClose>
                   </div>
-                </DialogContent>
-              </Dialog>
+              </WorkflowDialog>
             ) : null}
             {showSendForReviewButton ? (
               <>
@@ -1257,7 +1649,7 @@ export default function CaseWorkspacePage() {
               </>
             ) : null}
             {effectiveStatus === 'IN_REVIEW' || effectiveStatus === 'REQUEST_INVOICE' ? (
-              <Dialog
+              <WorkflowDialog
                 open={requestInvoiceDialogOpen}
                 onOpenChange={(open) => {
                   setRequestInvoiceDialogOpen(open);
@@ -1266,15 +1658,11 @@ export default function CaseWorkspacePage() {
                     setSelectedInvoiceSupplierId('');
                   }
                 }}
+                trigger={<WorkflowActionButton label="Request invoice" variant="primary" />}
+                title="Request Invoice"
+                hiddenTitle="Request supplier invoice"
+                className="motion-modal w-full max-w-2xl"
               >
-                <DialogTrigger asChild>
-                  <Button size="sm" variant="primary">Request invoice</Button>
-                </DialogTrigger>
-                <DialogContent className="motion-modal w-full max-w-2xl">
-                  <DialogTitle>
-                    <VisuallyHidden>Request supplier invoice</VisuallyHidden>
-                  </DialogTitle>
-                  <h3 className="text-lg font-semibold text-heading">Request Invoice</h3>
                   <p className="mt-2 text-sm text-muted">
                     Upload the PO and send the invoice request to the supplier.
                   </p>
@@ -1334,8 +1722,7 @@ export default function CaseWorkspacePage() {
                       <Button full variant="secondary">Cancel</Button>
                     </DialogClose>
                   </div>
-                </DialogContent>
-              </Dialog>
+              </WorkflowDialog>
             ) : null}
             {effectiveStatus === 'WAITING_INVOICE' ? (
               <Dialog
@@ -1349,7 +1736,7 @@ export default function CaseWorkspacePage() {
                 }}
               >
                 <DialogTrigger asChild>
-                  <Button size="sm" variant="secondary">Upload invoice</Button>
+                  <Button size="sm" variant="primary">Upload invoice</Button>
                 </DialogTrigger>
                 <DialogContent className="motion-modal w-full max-w-xl">
                   <DialogTitle>
@@ -1392,18 +1779,207 @@ export default function CaseWorkspacePage() {
                 </DialogContent>
               </Dialog>
             ) : null}
+            {(effectiveStatus === 'REQUEST_RECEIPT' || effectiveStatus === 'WAITING_RECEIPT') && hasSupplierInvoice ? (
+              <WorkflowDialog
+                open={sendPopDialogOpen}
+                onOpenChange={(open) => {
+                  setSendPopDialogOpen(open);
+                  if (open) {
+                    setPopFiles(
+                      effectiveStatus === 'WAITING_RECEIPT'
+                        ? uploadedPopFiles.map((file, index) => ({
+                            localId: `existing-${file.fileId}-${index}`,
+                            source: 'existing' as const,
+                            fileId: file.fileId,
+                            filename: file.filename,
+                            supplierId: file.supplierId,
+                          }))
+                        : [],
+                    );
+                    setPopUploadError(null);
+                    return;
+                  }
+                  if (!open) {
+                    setPopMessage('');
+                    setPopFiles([]);
+                    setPopUploadError(null);
+                  }
+                }}
+                trigger={
+                  <WorkflowActionButton
+                    variant={
+                      hasReceiptAttachment || effectiveStatus === 'WAITING_RECEIPT'
+                        ? 'secondary'
+                        : 'primary'
+                    }
+                    label={effectiveStatus === 'WAITING_RECEIPT' ? 'Resend POP' : 'Send POP'}
+                  />
+                }
+                title="Send POP"
+                hiddenTitle="Send proof of payment"
+                className="motion-modal w-full max-w-3xl"
+              >
+                  <p className="mt-2 text-sm text-muted">
+                    Upload one or more POP files, map each file to a supplier, then send receipt request.
+                  </p>
+                  <div className="mt-4 space-y-4">
+                    <FileDropzone
+                      label="Drag and drop POP PDF files here, or click to upload"
+                      onFilesSelected={uploadPopAttachments}
+                      multiple
+                      disabled={sendingPop}
+                      accept="application/pdf,.pdf"
+                    />
+                    {popUploadError ? (
+                      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                        {popUploadError}
+                      </div>
+                    ) : null}
+                    {popFiles.length > 0 ? (
+                      <div className="space-y-3">
+                        {popFiles.map((file) => (
+                          <div key={file.localId} className="rounded-lg border border-slate-200 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-sm font-medium text-slate-700">{file.filename}</p>
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() =>
+                                  setPopFiles((prev) =>
+                                    prev.filter((entry) => entry.localId !== file.localId),
+                                  )
+                                }
+                                disabled={sendingPop}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                            <div className="mt-2">
+                              <Select
+                                label="Supplier to receive this POP"
+                                value={file.supplierId}
+                                onChange={(event) =>
+                                  setPopFiles((prev) =>
+                                    prev.map((entry) =>
+                                      entry.localId === file.localId
+                                        ? { ...entry, supplierId: event.target.value }
+                                        : entry,
+                                    ),
+                                  )
+                                }
+                                options={[
+                                  { value: '', label: 'Select supplier' },
+                                  ...suppliers.map((supplier) => ({
+                                    value: supplier.id,
+                                    label: supplier.name,
+                                  })),
+                                ]}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <label className="block text-sm font-medium text-slate-700">
+                      Message
+                      <textarea
+                        value={popMessage}
+                        onChange={(event) => setPopMessage(event.target.value)}
+                        rows={4}
+                        className="mt-2 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-300 focus:outline-none focus:ring-2 focus:ring-slate-200"
+                        placeholder="Please find attached proof of payment. Kindly confirm receipt."
+                      />
+                    </label>
+                  </div>
+                  <div className="mt-6 flex gap-3">
+                    <Button full onClick={sendPop} disabled={!canSendPop || sendingPop}>
+                      {sendingPop ? 'Sending...' : 'Send'}
+                    </Button>
+                    <DialogClose asChild>
+                      <Button full variant="secondary">Cancel</Button>
+                    </DialogClose>
+                </div>
+              </WorkflowDialog>
+            ) : null}
+            {effectiveStatus === 'WAITING_RECEIPT' ? (
+              <WorkflowDialog
+                open={manualReceiptDialogOpen}
+                onOpenChange={(open) => {
+                  setManualReceiptDialogOpen(open);
+                  if (!open) {
+                    setManualReceiptFileError(null);
+                    setManualReceiptFile(null);
+                  }
+                }}
+                trigger={
+                  <WorkflowActionButton
+                    variant={hasReceiptAttachment ? 'secondary' : 'primary'}
+                    label="Upload receipt"
+                  />
+                }
+                title="Waiting for Receipt"
+                hiddenTitle="Upload supplier receipt"
+                className="motion-modal w-full max-w-xl"
+              >
+                  <p className="mt-2 text-sm text-muted">
+                    Upload the supplier receipt manually if it was received outside the API.
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    <FileDropzone
+                      label="Drag and drop supplier receipt PDF here"
+                      onFileSelected={uploadManualReceiptAttachment}
+                      disabled={uploadingManualReceipt || submittingManualReceipt}
+                      accept="application/pdf,.pdf"
+                    />
+                    {manualReceiptFile ? (
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                        Uploaded receipt: {manualReceiptFile.filename}
+                      </div>
+                    ) : uploadingManualReceipt ? (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                        Uploading receipt...
+                      </div>
+                    ) : null}
+                    {manualReceiptFileError ? (
+                      <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                        {manualReceiptFileError}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="mt-6 flex gap-3">
+                    <Button
+                      full
+                      onClick={submitManualReceipt}
+                      disabled={!manualReceiptFile || submittingManualReceipt}
+                    >
+                      {submittingManualReceipt ? 'Saving...' : 'Confirm receipt received'}
+                    </Button>
+                    <DialogClose asChild>
+                      <Button full variant="secondary">Cancel</Button>
+                    </DialogClose>
+                </div>
+              </WorkflowDialog>
+            ) : null}
+            {(effectiveStatus === 'REQUEST_RECEIPT' || effectiveStatus === 'WAITING_RECEIPT') &&
+            hasReceiptAttachment ? (
+              <WorkflowActionButton
+                variant="primary"
+                onClick={closePr}
+                disabled={closingPr}
+                label={closingPr ? 'Closing...' : 'Close PR'}
+              />
+            ) : null}
           </div>
+          ) : null}
         </div>
 
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as WorkspaceTab)}>
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            {/* <TabsTrigger value="checklist">Checklist</TabsTrigger> */}
             <TabsTrigger value="quotes">Quotes</TabsTrigger>
             <TabsTrigger value="notes">Notes</TabsTrigger>
             <TabsTrigger value="documents">Documents</TabsTrigger>
             <TabsTrigger value="audit">Audit Trail</TabsTrigger>
-            <TabsTrigger value="close">Close & Pay</TabsTrigger>
           </TabsList>
           <TabsContent value="overview">
             <div className="mt-6 grid gap-6 md:grid-cols-2">
@@ -1527,6 +2103,7 @@ export default function CaseWorkspacePage() {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-heading">Supplier quotes</h3>
+                  {!isReadOnlyClosedPr ? (
                   <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
                     <DialogTrigger asChild>
                       <Button size="sm" variant="secondary" disabled={!caseId}>
@@ -1619,6 +2196,7 @@ export default function CaseWorkspacePage() {
                       </div>
                     </DialogContent>
                   </Dialog>
+                  ) : null}
                 </div>
               </CardHeader>
               <CardContent>
@@ -1659,7 +2237,7 @@ export default function CaseWorkspacePage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {row.deleteQuoteId ? (
+                          {row.deleteQuoteId && !isReadOnlyClosedPr ? (
                             <Button
                               size="sm"
                               variant="secondary"
@@ -1682,6 +2260,7 @@ export default function CaseWorkspacePage() {
                     ))}
                   </tbody>
                 </Table>
+                {!isReadOnlyClosedPr ? (
                 <Dialog
                   open={Boolean(quoteToDelete)}
                   onOpenChange={(open) => {
@@ -1719,6 +2298,7 @@ export default function CaseWorkspacePage() {
                     </div>
                   </DialogContent>
                 </Dialog>
+                ) : null}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1728,6 +2308,8 @@ export default function CaseWorkspacePage() {
               <h3 className="text-lg font-semibold text-heading">Notes</h3>
               </CardHeader>
               <CardContent>
+              {!isReadOnlyClosedPr ? (
+              <>
               <textarea
                 className="w-full rounded-lg border border-slate-200 bg-white p-3 text-sm"
                 rows={6}
@@ -1745,6 +2327,8 @@ export default function CaseWorkspacePage() {
                   {postingNote ? 'Posting...' : 'Post Note'}
                 </Button>
               </div>
+              </>
+              ) : null}
               <div className="mt-6">
                 <h4 className="mb-4 font-semibold text-heading">Previous Notes:</h4>
                 <div className="space-y-3">
@@ -1866,23 +2450,6 @@ export default function CaseWorkspacePage() {
                   ))}
                   </tbody>
                 </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="close">
-            <Card className="mt-6">
-              <CardHeader>
-                <h3 className="text-lg font-semibold text-heading">Close & Pay</h3>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm text-slate-600">
-                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                  Upload proof of payment (POP) to complete the workflow.
-                </div>
-                <div className="flex flex-wrap gap-3">
-                  <Button variant="secondary" size="sm">Upload POP</Button>
-                  <Button variant="secondary" size="sm">Send to supplier</Button>
-                  <Button size="sm">Mark as closed & paid</Button>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
