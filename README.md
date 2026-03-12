@@ -30,15 +30,9 @@ pnpm dev
 | `MYSQL_USER` | MySQL user (default `root`). |
 | `MYSQL_PASSWORD` | MySQL password. |
 | `MYSQL_DATABASE` | MySQL database name (default `procuremes-agent-test`). |
+| `SESSION_COOKIE_SECURE` | Set to `true` for HTTPS deployments, `false` for plain HTTP deployments, or leave unset for auto-detection from `X-Forwarded-Proto`. |
 | `SESSION_TTL_HOURS` | Session expiration in hours (default 168). |
-| `MFA_TTL_MINUTES` | MFA code expiration in minutes (default 10). |
 | `NEXT_PUBLIC_API_URL` | Optional browser API base URL for non-proxied setups. |
-
-## MFA Behavior
-- Login uses email + password.
-- MFA is required if the user has not completed MFA in the last **3 days**.
-- MFA codes are logged to the console in development and stored in `OutboundEmailLog` with type `MFA_CODE`.
-- The `/mfa` UI shows a **dev-only** "View Code" section when `NODE_ENV=development`.
 
 ## Scripts
 - `pnpm dev`: run web + API in parallel

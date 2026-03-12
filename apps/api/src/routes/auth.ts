@@ -6,6 +6,7 @@ import {
   findUserById,
 } from '../lib/db.js';
 import { createSession, SESSION_COOKIE, verifyPassword } from '../lib/auth.js';
+import { shouldUseSecureCookie } from '../lib/cookies.js';
 
 export async function authRoutes(app: FastifyInstance) {
   app.post(
@@ -31,12 +32,13 @@ export async function authRoutes(app: FastifyInstance) {
         ip: request.ip,
         userAgent: request.headers['user-agent'],
       });
+      const secureCookie = shouldUseSecureCookie(request);
 
       reply.setCookie(SESSION_COOKIE, session.id, {
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
+        secure: secureCookie,
       });
 
       return reply.send({ success: true });
@@ -48,11 +50,12 @@ export async function authRoutes(app: FastifyInstance) {
     if (sessionId) {
       await deleteSessionById(sessionId);
     }
+    const secureCookie = shouldUseSecureCookie(request);
     reply.clearCookie(SESSION_COOKIE, {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
+      secure: secureCookie,
     });
     return reply.send({ success: true });
   });
