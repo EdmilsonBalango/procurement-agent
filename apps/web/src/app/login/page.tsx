@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Badge, Button, Card, CardContent, CardHeader } from '@procurement/ui';
 import { apiFetch } from '../../lib/api';
+import { useNotifications } from '../providers';
 
 type HealthStatus = 'checking' | 'up' | 'down';
 
@@ -32,6 +33,7 @@ function StatusBadge({ label, status }: { label: string; status: HealthStatus })
 
 export default function LoginPage() {
   const router = useRouter();
+  const { pushToast } = useNotifications();
   const [email, setEmail] = useState('edmilsonbalango34@gmail.com');
   const [password, setPassword] = useState('Password123!');
   const [error, setError] = useState('');
@@ -85,7 +87,13 @@ export default function LoginPage() {
       });
       router.push('/dashboard');
     } catch (err) {
-      setError((err as Error).message);
+      const message = (err as Error).message;
+      setError(message);
+      pushToast({
+        title: 'Login failed',
+        message,
+        tone: 'error',
+      });
     } finally {
       setLoading(false);
     }
