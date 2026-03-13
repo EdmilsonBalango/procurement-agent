@@ -1,5 +1,5 @@
-// const webhookUrl = 'https://n8n.karingani.com/webhook/a379f74d-57f1-4b35-a843-35a013f4455a';
-const webhookUrl_test = 'https://n8n.karingani.com/webhook-test/a379f74d-57f1-4b35-a843-35a013f4455a';
+const webhookUrl = 'https://n8n.karingani.com/webhook/a379f74d-57f1-4b35-a843-35a013f4455a';
+// const webhookUrl_test = 'https://n8n.karingani.com/webhook-test/a379f74d-57f1-4b35-a843-35a013f4455a';
 
 export type EmailWebhookPayload = {
   type:
@@ -46,7 +46,7 @@ export type PopWebhookPayload = {
 };
 
 export async function forwardEmailToWebhook(payload: EmailWebhookPayload) {
-  const response = await fetch(webhookUrl_test, {
+  const response = await fetch(webhookUrl, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
@@ -63,7 +63,7 @@ export async function forwardEmailToWebhook(payload: EmailWebhookPayload) {
 }
 
 export async function forwardPopToWebhook(payload: PopWebhookPayload) {
-  const response = await fetch(webhookUrl_test, {
+  const response = await fetch(webhookUrl, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

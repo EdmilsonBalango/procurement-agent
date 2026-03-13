@@ -36,7 +36,13 @@ function isPrivateNetworkHostname(hostname: string) {
 }
 
 function parseAllowedOrigins() {
-  return (process.env.CORS_ORIGIN ?? DEFAULT_ALLOWED_ORIGINS.join(','))
+  const configuredOrigins = process.env.CORS_ORIGIN?.trim();
+  const publicAppOrigin = process.env.APP_ORIGIN?.trim();
+  const fallbackOrigins = publicAppOrigin
+    ? [publicAppOrigin, ...DEFAULT_ALLOWED_ORIGINS]
+    : DEFAULT_ALLOWED_ORIGINS;
+
+  return (configuredOrigins ?? fallbackOrigins.join(','))
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean);
