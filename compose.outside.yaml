@@ -13,8 +13,7 @@ services:
       NODE_ENV: production
       INTERNAL_API_URL: http://api:3001
     depends_on:
-      api:
-        condition: service_healthy
+      - api
     ports:
       - 3000:3000
 
@@ -36,9 +35,3 @@ services:
       - host.docker.internal:host-gateway
     expose:
       - 3001
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 10s
