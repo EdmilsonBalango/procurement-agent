@@ -394,6 +394,55 @@ export async function findUserById(id: string) {
   return rows[0] ?? null;
 }
 
+export async function createUser(data: {
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'BUYER';
+  password: string;
+}) {
+  const user: User = {
+    id: randomUUID(),
+    name: data.name,
+    email: data.email,
+    role: data.role,
+    passwordHash: bcrypt.hashSync(data.password, 10),
+    lastMfaAt: null,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+
+  await execute(
+    'insert into users (id, name, email, role, password_hash, last_mfa_at, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      user.id,
+      user.name,
+      user.email,
+      user.role,
+      user.passwordHash,
+      user.lastMfaAt,
+      user.createdAt,
+      user.updatedAt,
+    ],
+  );
+
+  return user;
+}
+
+export async function deleteUserById(id: string) {
+  await execute('delete from notifications where user_id = ?', [id]);
+  await execute('delete from mfa_challenges where user_id = ?', [id]);
+  await execute('delete from sessions where user_id = ?', [id]);
+  await execute('delete from users where id = ?', [id]);
+}
+
+export async function countCasesReferencingUser(id: string) {
+  const rows = await query<{ count: number }>(
+    'select count(*) as count from cases where assigned_buyer_id = ? or exception_approved_by_id = ?',
+    [id, id],
+  );
+  return rows[0]?.count ?? 0;
+}
+
 export async function updateUser(id: string, data: Partial<User>) {
   const fields: string[] = [];
   const params: unknown[] = [];

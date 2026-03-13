@@ -156,8 +156,8 @@ export const Topbar = () => {
             Alerts
           </Button>
           {alertsOpen ? (
-            <Card className="absolute right-0 mt-3 w-[320px] border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-950">
-              <CardContent className="space-y-4 p-4">
+            <Card className="absolute right-0 mt-3 w-[320px] max-h-[calc(80vh-6rem)] overflow-hidden border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-950">
+              <CardContent className="max-h-[calc(80vh-6rem)] space-y-4 overflow-y-auto p-4">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Alerts

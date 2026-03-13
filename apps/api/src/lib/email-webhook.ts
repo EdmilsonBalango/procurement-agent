@@ -2,7 +2,12 @@
 const webhookUrl_test = 'https://n8n.karingani.com/webhook-test/a379f74d-57f1-4b35-a843-35a013f4455a';
 
 export type EmailWebhookPayload = {
-  type: 'PR_ASSIGNMENT_NOTIFICATION' | 'QUOTES_FOR_REVIEW' | 'REQUEST_QUOTES' | 'REQUEST_INVOICE';
+  type:
+    | 'PR_ASSIGNMENT_NOTIFICATION'
+    | 'QUOTES_FOR_REVIEW'
+    | 'REQUEST_QUOTES'
+    | 'REQUEST_INVOICE'
+    | 'USER_CREDENTIALS';
   html: string;
   messageID: string;
   to?: string[];

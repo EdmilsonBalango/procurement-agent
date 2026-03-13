@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ChangeEvent, type MouseE
 import { useRouter } from 'next/navigation';
 import type { Route } from 'next';
 import { BulkDeleteButton } from '../../components/bulk-delete-button';
+import { ConfirmActionDialog } from '../../components/confirm-action-dialog';
 import { PageShell } from '../../components/page-shell';
 import { TableActionButton } from '../../components/table-action-button';
 import { TablePagination } from '../../components/table-pagination';
@@ -878,51 +879,40 @@ export default function SuppliersPage() {
             />
           </CardContent>
         </Card>
-        <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && !isDeleting && setDeleteDialogOpen(false)}>
-          <DialogContent className="motion-modal w-full max-w-md">
-            <DialogTitle>
-              <VisuallyHidden>Confirm delete supplier</VisuallyHidden>
-            </DialogTitle>
-            <h3 className="text-lg font-semibold text-heading">
-              {suppliersToDelete.length > 1 ? 'Delete suppliers' : 'Delete supplier'}
-            </h3>
-            <p className="mt-2 text-sm text-muted">
-              {suppliersToDelete.length > 1 ? (
-                <>
-                  Are you sure you want to delete{' '}
-                  <span className="font-semibold text-slate-700">
-                    {suppliersToDelete.length} suppliers
-                  </span>
-                  ? This action cannot be undone.
-                </>
-              ) : (
-                <>
-                  Are you sure you want to delete{' '}
-                  <span className="font-semibold text-slate-700">
-                    {suppliersToDelete[0]?.name ?? 'this supplier'}
-                  </span>
-                  ? This action cannot be undone.
-                </>
-              )}
-            </p>
-            <div className="mt-6 flex gap-3">
-              <Button
-                variant="secondary"
-                full
-                disabled={isDeleting}
-                onClick={() => {
-                  setDeleteDialogOpen(false);
-                  setSuppliersToDelete([]);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button full disabled={isDeleting} onClick={handleDelete}>
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <ConfirmActionDialog
+          open={deleteDialogOpen}
+          onOpenChange={(open) => {
+            setDeleteDialogOpen(open);
+            if (!open) {
+              setSuppliersToDelete([]);
+            }
+          }}
+          title={suppliersToDelete.length > 1 ? 'Delete suppliers' : 'Delete supplier'}
+          srTitle="Confirm delete supplier"
+          description={
+            suppliersToDelete.length > 1 ? (
+              <>
+                Are you sure you want to delete{' '}
+                <span className="font-semibold text-slate-700">
+                  {suppliersToDelete.length} suppliers
+                </span>
+                ? This action cannot be undone.
+              </>
+            ) : (
+              <>
+                Are you sure you want to delete{' '}
+                <span className="font-semibold text-slate-700">
+                  {suppliersToDelete[0]?.name ?? 'this supplier'}
+                </span>
+                ? This action cannot be undone.
+              </>
+            )
+          }
+          onConfirm={handleDelete}
+          confirmLabel="Delete"
+          loading={isDeleting}
+          loadingLabel="Deleting..."
+        />
         <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
           <DialogContent className="motion-modal w-full max-w-2xl">
             <DialogTitle>

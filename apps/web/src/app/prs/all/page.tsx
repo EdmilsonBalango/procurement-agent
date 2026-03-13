@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { BulkDeleteButton } from '../../../components/bulk-delete-button';
+import { ConfirmActionDialog } from '../../../components/confirm-action-dialog';
 import { PageShell } from '../../../components/page-shell';
 import { TableActionButton } from '../../../components/table-action-button';
 import { TablePagination } from '../../../components/table-pagination';
@@ -12,15 +13,11 @@ import {
   Card,
   CardContent,
   CardHeader,
-  Dialog,
-  DialogContent,
-  DialogTitle,
   Table,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  VisuallyHidden,
 } from '@procurement/ui';
 import { Filter } from 'lucide-react';
 import { apiFetch } from '../../../lib/api';
@@ -416,51 +413,39 @@ function AllPrsPageContent() {
             />
           </CardContent>
         </Card>
-        <Dialog
+        <ConfirmActionDialog
           open={prsToDelete.length > 0}
-          onOpenChange={(open) => !open && !isDeleting && setPrsToDelete([])}
-        >
-          <DialogContent className="motion-modal w-full max-w-md">
-            <DialogTitle>
-              <VisuallyHidden>Confirm delete PR</VisuallyHidden>
-            </DialogTitle>
-            <h3 className="text-lg font-semibold text-heading">
-              {prsToDelete.length > 1 ? 'Delete PRs' : 'Delete PR'}
-            </h3>
-            <p className="mt-2 text-sm text-muted">
-              {prsToDelete.length > 1 ? (
-                <>
-                  Delete{' '}
-                  <span className="font-semibold text-slate-700">
-                    {prsToDelete.length} PRs
-                  </span>
-                  ? They will be moved to quarantine and hidden from the application.
-                </>
-              ) : (
-                <>
-                  Delete{' '}
-                  <span className="font-semibold text-slate-700">
-                    {prsToDelete[0]?.prNumber ?? 'this PR'}
-                  </span>
-                  ? It will be moved to quarantine and hidden from the application.
-                </>
-              )}
-            </p>
-            <div className="mt-6 flex gap-3">
-              <Button
-                variant="secondary"
-                full
-                disabled={isDeleting}
-                onClick={() => setPrsToDelete([])}
-              >
-                Cancel
-              </Button>
-              <Button full disabled={isDeleting} onClick={handleDelete}>
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+          onOpenChange={(open) => {
+            if (!open) {
+              setPrsToDelete([]);
+            }
+          }}
+          title={prsToDelete.length > 1 ? 'Delete PRs' : 'Delete PR'}
+          srTitle="Confirm delete PR"
+          description={
+            prsToDelete.length > 1 ? (
+              <>
+                Delete{' '}
+                <span className="font-semibold text-slate-700">
+                  {prsToDelete.length} PRs
+                </span>
+                ? They will be moved to quarantine and hidden from the application.
+              </>
+            ) : (
+              <>
+                Delete{' '}
+                <span className="font-semibold text-slate-700">
+                  {prsToDelete[0]?.prNumber ?? 'this PR'}
+                </span>
+                ? It will be moved to quarantine and hidden from the application.
+              </>
+            )
+          }
+          onConfirm={handleDelete}
+          confirmLabel="Delete"
+          loading={isDeleting}
+          loadingLabel="Deleting..."
+        />
       </div>
     </PageShell>
   );

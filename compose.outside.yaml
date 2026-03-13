@@ -1,7 +1,11 @@
+# Use this file when running `docker compose` from outside the repository folder.
+# Example:
+#   APP_ROOT=/absolute/path/to/procurement-agent docker compose -f /absolute/path/to/procurement-agent/compose.outside.yaml up --build
+
 services:
   web:
     build:
-      context: .
+      context: ${APP_ROOT:-/Users/edmilsonbalango/procurement-agent}
       dockerfile: Dockerfile
       args:
         INTERNAL_API_URL: http://api:3001
@@ -16,7 +20,7 @@ services:
 
   api:
     build:
-      context: .
+      context: ${APP_ROOT:-/Users/edmilsonbalango/procurement-agent}
       dockerfile: apps/api/Dockerfile
     environment:
       NODE_ENV: production
