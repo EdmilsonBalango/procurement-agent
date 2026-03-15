@@ -31,3 +31,5 @@ services:
       - host.docker.internal:host-gateway
     expose:
       - 3001
+    ports:
+      - 3001:3001

@@ -32,6 +32,8 @@ ENV PORT=3001
 
 RUN apk add --no-cache libc6-compat
 RUN mkdir -p /app/apps/api/uploads
+RUN mkdir -p /app/apps/api/uploads/quotes
+RUN mkdir -p /app/apps/api/uploads/invoices
 
 COPY --from=build /app /app
 
